@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router';
 import axiosInstance from './lib/axios';
 import { useUserStore } from './stores/userStore';
+import appLogo from './assets/logo.png';
 
 // const user = ref<{ name: string; email: string } | null>(null);
 // const isAuthenticated = ref(false);
@@ -23,15 +24,12 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside);
 });
 
-// 监听用户登录状态，自动展开/关闭sidebar
 watch(
   () => userStore.user,
   (newUser) => {
     if (newUser) {
-      // 用户登录时自动展开sidebar
       isSidebarOpen.value = true;
     } else {
-      // 用户登出时关闭sidebar
       isSidebarOpen.value = false;
     }
   }
@@ -109,7 +107,9 @@ onBeforeUnmount(() => {
       <div class="border-b border-gray-200 dark:border-gray-700 pb-4" :class="isSidebarOpen ? 'px-6' : 'px-4'">
         <div :class="['flex items-center gap-3', isSidebarOpen ? 'justify-between' : 'justify-center']">
           <div class="flex items-center gap-3">
-            <img src="https://flowbite.com/images/logo.svg" class="h-8 w-8" alt="Logo" />
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm">
+              <img :src="appLogo" class="h-10 w-10 object-contain" alt="Logo" />
+            </div>
             <div class="flex flex-col" :class="isSidebarOpen ? '' : 'hidden'">
               <span class="text-lg font-semibold text-slate-900 dark:text-white">SMARTBUDGET</span>
               <span class="text-sm text-gray-500 dark:text-gray-400">Hi, {{ userStore.user?.name ?? 'Guest' }}</span>
@@ -144,6 +144,14 @@ onBeforeUnmount(() => {
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16h13M4 16l4-4m-4 4 4 4M20 8H7m13 0-4 4m4-4-4-4"/>
               </svg>
               <span :class="sidebarLabelClasses">Transactions</span>
+            </RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/transaction-options" :class="sidebarItemClasses">
+              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H21M3 6h3m4 12h11M3 18h3m8-6h7M3 12h7m-1-8v4m8 8v4"/>
+              </svg>
+              <span :class="sidebarLabelClasses">Manage Options</span>
             </RouterLink>
           </li>
           <!-- Financial Analytics -->

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class TransactionController extends Controller
 {
@@ -12,22 +13,33 @@ class TransactionController extends Controller
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
 
-        $query = $request->user()->transactions()->latest('transaction_date');
+        $query = $request->user()
+            ->transactions()
+            ->with(['transactionType:id,name', 'transactionCategory:id,name'])
+            ->latest('transaction_date');
 
         $transactions = $query->paginate($perPage, ['*'], 'page', $page);
+        $transactions->through(function ($transaction) {
+            return [
+                'id' => $transaction->id,
+                'description' => $transaction->description,
+                'amount' => $transaction->amount,
+                'transaction_type_id' => $transaction->transaction_type_id,
+                'transaction_category_id' => $transaction->transaction_category_id,
+                'type' => optional($transaction->transactionType)->name,
+                'category' => optional($transaction->transactionCategory)->name,
+                'transaction_date' => optional($transaction->transaction_date)->format('Y-m-d'),
+                'created_at' => $transaction->created_at,
+                'updated_at' => $transaction->updated_at,
+            ];
+        });
 
         return response()->json($transactions);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'description' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-            'category' => 'nullable|string|max:100',
-            'transaction_date' => 'required|date',
-        ]);
+        $validated = $this->validateTransaction($request);
 
         $transaction = $request->user()->transactions()->create($validated);
 
@@ -38,13 +50,7 @@ class TransactionController extends Controller
     {
         abort_unless($request->user()->id === $transaction->user_id, 403);
 
-        $validated = $request->validate([
-            'description' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-            'category' => 'nullable|string|max:100',
-            'transaction_date' => 'required|date',
-        ]);
+        $validated = $this->validateTransaction($request);
 
         $transaction->update($validated);
 
@@ -58,5 +64,37 @@ class TransactionController extends Controller
         $transaction->delete();
 
         return response()->noContent();
+    }
+
+    private function validateTransaction(Request $request): array
+    {
+        $this->ensureDefaultTypes($request);
+
+        return $request->validate([
+            'description' => 'required|string|max:255',
+            'amount' => 'required|numeric|min:0',
+            'transaction_type_id' => [
+                'required',
+                'integer',
+                Rule::exists('transaction_types', 'id')->where(fn ($query) => $query->where('user_id', $request->user()->id)),
+            ],
+            'transaction_category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('transaction_categories', 'id')->where(fn ($query) => $query->where('user_id', $request->user()->id)),
+            ],
+            'transaction_date' => 'required|date',
+        ]);
+    }
+
+    private function ensureDefaultTypes(Request $request): void
+    {
+        if ($request->user()->transactionTypes()->exists()) {
+            return;
+        }
+
+        foreach (['income', 'expense'] as $name) {
+            $request->user()->transactionTypes()->create(['name' => $name]);
+        }
     }
 }
