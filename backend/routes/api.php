@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionOptionController;
 use App\Models\User;
@@ -22,6 +24,8 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 
+    Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+
     Route::get('/users', function (Request $request) {
         return User::all();
     });
@@ -30,6 +34,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/transactions', [TransactionController::class, 'store']);
     Route::patch('/transactions/{transaction}', [TransactionController::class, 'update']);
     Route::delete('/transactions/{transaction}', [TransactionController::class, 'destroy']);
+
+    Route::get('/accounts', [AccountController::class, 'index']);
+    Route::post('/accounts', [AccountController::class, 'store']);
+    Route::patch('/accounts/{account}', [AccountController::class, 'update']);
+    Route::delete('/accounts/{account}', [AccountController::class, 'destroy']);
 
     Route::get('/transaction-options', [TransactionOptionController::class, 'index']);
     Route::post('/transaction-options/types', [TransactionOptionController::class, 'storeType']);

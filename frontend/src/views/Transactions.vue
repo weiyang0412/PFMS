@@ -157,8 +157,7 @@ onMounted(async () => {
 
       <section class="flex-1 overflow-hidden rounded-lg bg-white p-6 shadow">
         <div class="mb-4"><h2 class="text-xl font-semibold text-slate-900">Recent Transactions</h2><p class="text-sm text-slate-500">Track your latest finance records.</p></div>
-        <div v-if="isLoading" class="py-10 text-center text-slate-500">Loading transactions...</div>
-        <div v-else class="flex h-full flex-col">
+        <div v-if="!isLoading" class="flex h-full flex-col">
           <div v-if="transactions.length === 0" class="py-10 text-center text-slate-500">No transactions yet. Add one to start tracking.</div>
           <div v-else class="flex flex-1 flex-col">
             <div class="flex-1 overflow-hidden"><div class="h-full overflow-x-auto"><table class="min-w-full border-collapse text-left"><thead class="sticky top-0 z-10 border-b border-slate-200 bg-white"><tr class="text-sm text-slate-600"><th class="px-4 py-3">Date</th><th class="px-4 py-3">Description</th><th class="px-4 py-3">Category</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Amount</th><th class="px-4 py-3">Actions</th></tr></thead><tbody><tr v-for="transaction in transactions" :key="transaction.id" class="border-b border-slate-200 text-sm"><td class="px-4 py-3">{{ transaction.transaction_date }}</td><td class="px-4 py-3">{{ transaction.description }}</td><td class="px-4 py-3">{{ transaction.category || '—' }}</td><td class="px-4 py-3">{{ transaction.type }}</td><td class="px-4 py-3 font-semibold" :class="transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'">{{ transaction.type === 'income' ? '+' : '-' }}{{ Number(transaction.amount).toFixed(2) }}</td><td class="px-4 py-3"><div class="flex flex-wrap gap-2"><button type="button" @click="openViewModal(transaction)" class="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">View</button><button type="button" @click="openEditModal(transaction)" class="rounded-md border border-blue-700 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">Edit</button><button type="button" @click="openConfirmDelete(transaction)" class="rounded-md border border-red-700 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Delete</button></div></td></tr></tbody></table></div></div>
@@ -166,6 +165,19 @@ onMounted(async () => {
           </div>
         </div>
       </section>
+
+      <Teleport to="body">
+        <div
+          v-if="isLoading"
+          class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4"
+        >
+          <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+            <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
+            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+            <!-- <p class="mt-1 text-sm text-slate-500">Fetching your latest transaction records.</p> -->
+          </div>
+        </div>
+      </Teleport>
 
       <Teleport to="body">
         <div v-if="showConfirmDelete" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8" @click.self="showConfirmDelete = false">

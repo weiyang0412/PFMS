@@ -9,6 +9,7 @@ export const useUserStore = defineStore('user', {
         /** @type {User | null} */
         user: null,
         isAuthenticated: false,
+        authChecked: false,
     }),
 
     actions: {
@@ -21,7 +22,17 @@ export const useUserStore = defineStore('user', {
                 console.error(error)
                 this.user = null
                 this.isAuthenticated = false
+            } finally {
+                this.authChecked = true
             }
+        },
+
+        async ensureAuthChecked() {
+            if (this.authChecked) {
+                return
+            }
+
+            await this.fetchUser()
         },
 
         async logout() {
@@ -29,6 +40,7 @@ export const useUserStore = defineStore('user', {
                 await axiosInstance.post('/logout')
                 this.user = null
                 this.isAuthenticated = false
+                this.authChecked = true
             } catch (error) {
                 console.error(error)
             }

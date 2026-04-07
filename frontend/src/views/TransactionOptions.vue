@@ -119,11 +119,7 @@ onMounted(() => {
         <p class="mt-2 text-sm text-slate-500">Create the type and category lists that appear in your add transaction form.</p>
       </section>
 
-      <div v-if="isLoading" class="rounded-lg bg-white p-10 text-center text-slate-500 shadow">
-        Loading options...
-      </div>
-
-      <div v-else class="grid gap-6 lg:grid-cols-2">
+      <div v-if="!isLoading" class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-lg bg-white p-6 shadow">
           <h2 class="text-xl font-semibold text-slate-900">Types</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Income, Expense, Transfer.</p>
@@ -203,6 +199,19 @@ onMounted(() => {
           <p v-else class="mt-6 text-sm text-slate-500">No categories yet. Add one above.</p>
         </section>
       </div>
+
+      <Teleport to="body">
+        <div
+          v-if="isLoading"
+          class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4"
+        >
+          <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+            <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
+            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+            <!-- <p class="mt-1 text-sm text-slate-500">Fetching your data.</p> -->
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
