@@ -49,5 +49,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/budgets', [BudgetController::class, 'index']);
     Route::post('/budgets', [BudgetController::class, 'store']);
+    Route::post('/budgets/copy-previous-month', [BudgetController::class, 'copyPreviousMonth']);
     Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy']);
 });

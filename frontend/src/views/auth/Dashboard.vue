@@ -64,6 +64,13 @@ interface DashboardSummary {
   period: DashboardPeriod;
 }
 
+interface BudgetAlertSummary {
+  total_budget: number;
+  total_spent: number;
+  warning_count: number;
+  total_overspent: number;
+}
+
 const defaultOverview: DashboardOverview = {
   total_balance: 0,
   account_count: 0,
@@ -90,8 +97,10 @@ const defaultPeriod: DashboardPeriod = {
 const userStore = useUserStore();
 const isInitialLoading = ref(false);
 const isRefreshing = ref(false);
+const isBudgetAlertLoading = ref(false);
 const loadError = ref('');
 const summary = ref<DashboardSummary | null>(null);
+const budgetAlertSummary = ref<BudgetAlertSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 
 const overview = computed<DashboardOverview>(() => summary.value?.overview ?? defaultOverview);
 const accounts = computed<DashboardAccount[]>(() => summary.value?.accounts ?? []);
@@ -123,6 +132,10 @@ const shortDate = (value = '') => {
 };
 
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
+const currentMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
 
 const loadDashboard = async (manualRefresh = false) => {
   if (manualRefresh) isRefreshing.value = true;
@@ -140,8 +153,25 @@ const loadDashboard = async (manualRefresh = false) => {
   }
 };
 
+const loadBudgetAlerts = async () => {
+  isBudgetAlertLoading.value = true;
+  try {
+    const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth(), only_budgeted: 1 } });
+    budgetAlertSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0 };
+  } catch (error) {
+    console.error(error);
+  } finally {
+    isBudgetAlertLoading.value = false;
+  }
+};
+
+const refreshAll = async () => {
+  await Promise.all([loadDashboard(true), loadBudgetAlerts()]);
+};
+
 onMounted(() => {
   loadDashboard();
+  loadBudgetAlerts();
 });
 </script>
 
@@ -159,7 +189,7 @@ onMounted(() => {
           <div class="flex items-center gap-3">
             <button
               type="button"
-              @click="loadDashboard(true)"
+              @click="refreshAll"
               :disabled="isRefreshing"
               class="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -171,6 +201,14 @@ onMounted(() => {
           </div>
         </div>
         <div v-if="loadError" class="mt-6 rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-100">{{ loadError }}</div>
+        <RouterLink
+          v-if="!isBudgetAlertLoading && budgetAlertSummary.warning_count > 0"
+          to="/budgets"
+          class="mt-4 block rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <p class="font-medium">{{ budgetAlertSummary.warning_count }} budget alert(s) need attention.</p>
+          <p class="mt-1 text-amber-800">Overspent total: {{ money(budgetAlertSummary.total_overspent) }}. Click to review warnings and overspending categories.</p>
+        </RouterLink>
         <div class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <article class="rounded-3xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-slate-300">Total Balance</p>

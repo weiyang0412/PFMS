@@ -13,6 +13,8 @@ class BudgetController extends Controller
     {
         $month = $this->resolveMonth($request->query('month'));
         [$monthStart, $monthEnd] = $this->monthRange($month);
+        $onlyBudgeted = $request->boolean('only_budgeted');
+        $defaultThreshold = $this->resolveThreshold($request->query('default_threshold'));
 
         $budgets = $request->user()
             ->budgets()
@@ -29,15 +31,21 @@ class BudgetController extends Controller
             ->groupBy('transaction_category_id')
             ->pluck('spent', 'transaction_category_id');
 
-        $items = $request->user()
+        $categoryQuery = $request->user()
             ->transactionCategories()
-            ->orderBy('name')
+            ->orderBy('name');
+
+        if ($onlyBudgeted) {
+            $categoryQuery->whereIn('id', $budgets->keys()->all());
+        }
+
+        $items = $categoryQuery
             ->get()
-            ->map(function ($category) use ($budgets, $spentByCategory) {
+            ->map(function ($category) use ($budgets, $spentByCategory, $defaultThreshold) {
                 $budget = $budgets->get($category->id);
                 $spent = round((float) ($spentByCategory[$category->id] ?? 0), 2);
                 $amount = $budget ? round((float) $budget->amount, 2) : null;
-                $threshold = $budget ? (int) $budget->alert_threshold : 80;
+                $threshold = $budget ? (int) $budget->alert_threshold : $defaultThreshold;
                 $usagePct = $amount && $amount > 0 ? round(($spent / $amount) * 100, 1) : 0;
 
                 return [
@@ -56,12 +64,24 @@ class BudgetController extends Controller
             })
             ->values();
 
+        $totalOverspent = round(
+            $items
+                ->filter(fn ($item) => $item['remaining'] !== null && $item['remaining'] < 0)
+                ->sum(fn ($item) => abs((float) $item['remaining'])),
+            2
+        );
+
         return response()->json([
             'month' => $month,
             'summary' => [
                 'total_budget' => round($items->sum(fn ($item) => (float) ($item['amount'] ?? 0)), 2),
                 'total_spent' => round($items->sum(fn ($item) => (float) $item['spent']), 2),
                 'warning_count' => $items->whereIn('alert_level', ['warning', 'over'])->count(),
+                'total_overspent' => $totalOverspent,
+            ],
+            'meta' => [
+                'only_budgeted' => $onlyBudgeted,
+                'default_threshold' => $defaultThreshold,
             ],
             'items' => $items,
         ]);
@@ -110,6 +130,41 @@ class BudgetController extends Controller
         return response()->noContent();
     }
 
+    public function copyPreviousMonth(Request $request)
+    {
+        $validated = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+        ]);
+
+        $targetMonth = $this->resolveMonth($validated['month']);
+        $previousMonth = Carbon::createFromFormat('Y-m', $targetMonth)->subMonthNoOverflow()->format('Y-m');
+
+        $previousBudgets = $request->user()
+            ->budgets()
+            ->where('month', $previousMonth)
+            ->get();
+
+        foreach ($previousBudgets as $budget) {
+            Budget::updateOrCreate(
+                [
+                    'user_id' => $request->user()->id,
+                    'transaction_category_id' => $budget->transaction_category_id,
+                    'month' => $targetMonth,
+                ],
+                [
+                    'amount' => $budget->amount,
+                    'alert_threshold' => $budget->alert_threshold,
+                ]
+            );
+        }
+
+        return response()->json([
+            'copied_count' => $previousBudgets->count(),
+            'from_month' => $previousMonth,
+            'to_month' => $targetMonth,
+        ]);
+    }
+
     private function resolveMonth(?string $input): string
     {
         if (!$input) return now()->format('Y-m');
@@ -125,5 +180,12 @@ class BudgetController extends Controller
         $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
         return [$start, $end];
+    }
+
+    private function resolveThreshold($input): int
+    {
+        $threshold = (int) $input;
+        if ($threshold < 1 || $threshold > 100) return 80;
+        return $threshold;
     }
 }

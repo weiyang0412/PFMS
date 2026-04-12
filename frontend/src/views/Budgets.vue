@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import axiosInstance from '../lib/axios';
 
 interface BudgetItem {
@@ -18,18 +19,29 @@ interface BudgetSummary {
   total_budget: number;
   total_spent: number;
   warning_count: number;
+  total_overspent: number;
 }
 
 const month = ref(new Date().toISOString().slice(0, 7));
 const items = ref<BudgetItem[]>([]);
-const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0 });
+const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const isLoading = ref(false);
+const isCopying = ref(false);
 const savingCategoryIds = ref<number[]>([]);
 const deletingCategoryIds = ref<number[]>([]);
 const showToast = ref(false);
 const toastMessage = ref('');
 const toastTone = ref<'success' | 'danger'>('success');
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+const route = useRoute();
+const router = useRouter();
+const storedThreshold = Number(localStorage.getItem('budget_default_threshold') || 80);
+const defaultAlertThreshold = ref(Number.isFinite(storedThreshold) && storedThreshold >= 1 && storedThreshold <= 100 ? storedThreshold : 80);
+
+const isValidMonth = (value: string) => /^\d{4}-\d{2}$/.test(value);
+if (typeof route.query.month === 'string' && isValidMonth(route.query.month)) {
+  month.value = route.query.month;
+}
 
 const formatMoney = (value = 0) =>
   new Intl.NumberFormat('en-MY', {
@@ -61,9 +73,9 @@ const setBusy = (type: 'save' | 'delete', categoryId: number, enabled: boolean) 
 const loadBudgets = async () => {
   isLoading.value = true;
   try {
-    const { data } = await axiosInstance.get('/budgets', { params: { month: month.value } });
+    const { data } = await axiosInstance.get('/budgets', { params: { month: month.value, default_threshold: defaultAlertThreshold.value } });
     items.value = data.items || [];
-    summary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0 };
+    summary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
   } catch (error) {
     console.error(error);
     showToastMessage('Unable to load budgets right now.', 'danger');
@@ -113,10 +125,69 @@ const clearBudget = async (item: BudgetItem) => {
 };
 
 const warningItems = computed(() => items.value.filter((item) => item.alert_level === 'warning' || item.alert_level === 'over'));
+const focusedCategoryId = computed(() => {
+  const raw = route.query.category_id;
+  const parsed = Number(Array.isArray(raw) ? raw[0] : raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+});
+
+const copyPreviousMonth = async () => {
+  isCopying.value = true;
+  try {
+    const { data } = await axiosInstance.post('/budgets/copy-previous-month', { month: month.value });
+    await loadBudgets();
+    const copiedCount = Number(data?.copied_count ?? 0);
+    showToastMessage(copiedCount > 0 ? `Copied ${copiedCount} budget(s) from previous month.` : 'No previous budgets to copy.', copiedCount > 0 ? 'success' : 'danger');
+  } catch (error) {
+    console.error(error);
+    showToastMessage('Unable to copy previous month budgets.', 'danger');
+  } finally {
+    isCopying.value = false;
+  }
+};
+
+const clearFocus = () => {
+  const nextQuery = { ...route.query };
+  delete nextQuery.category_id;
+  router.replace({ query: nextQuery });
+};
+
+const shiftMonth = (offset: number) => {
+  const [year, monthPart] = month.value.split('-').map(Number);
+  if (!year || !monthPart) return;
+  const nextDate = new Date(year, monthPart - 1 + offset, 1);
+  month.value = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+  loadBudgets();
+};
+
+const persistDefaultThreshold = () => {
+  const safe = Math.min(100, Math.max(1, Number(defaultAlertThreshold.value) || 80));
+  defaultAlertThreshold.value = safe;
+  localStorage.setItem('budget_default_threshold', String(safe));
+  items.value = items.value.map((item) => (item.budget_id ? item : { ...item, alert_threshold: safe }));
+};
 
 onMounted(() => {
   loadBudgets();
 });
+
+watch(
+  () => route.query.month,
+  (nextMonth) => {
+    if (typeof nextMonth === 'string' && isValidMonth(nextMonth) && nextMonth !== month.value) {
+      month.value = nextMonth;
+      loadBudgets();
+    }
+  },
+);
+
+watch(
+  () => month.value,
+  (nextMonth) => {
+    const nextQuery = { ...route.query, month: nextMonth };
+    router.replace({ query: nextQuery });
+  },
+);
 
 onUnmounted(() => {
   if (toastTimer) clearTimeout(toastTimer);
@@ -133,7 +204,20 @@ onUnmounted(() => {
             <p class="mt-2 text-sm text-slate-500">Set monthly category budgets and get warning alerts before overspending.</p>
           </div>
           <div class="flex items-center gap-3">
+            <button type="button" @click="shiftMonth(-1)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Prev
+            </button>
             <input v-model="month" type="month" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+            <button type="button" @click="shiftMonth(1)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Next
+            </button>
+            <div class="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3">
+              <span class="text-xs text-slate-500">Default Alert %</span>
+              <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-gray-300 px-2 py-1 text-sm" @change="persistDefaultThreshold" />
+            </div>
+            <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
+            </button>
             <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
               {{ isLoading ? 'Loading...' : 'Load' }}
             </button>
@@ -141,7 +225,12 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <section class="grid gap-6 lg:grid-cols-3">
+      <section v-if="focusedCategoryId" class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 shadow">
+        Focused on category from alert.
+        <button type="button" class="ml-2 font-medium underline" @click="clearFocus">Show all</button>
+      </section>
+
+      <section class="grid gap-6 lg:grid-cols-4">
         <article class="rounded-lg bg-white p-6 shadow">
           <p class="text-sm text-slate-500">Total Budget</p>
           <p class="mt-3 text-3xl font-semibold text-slate-900">{{ formatMoney(summary.total_budget) }}</p>
@@ -153,6 +242,10 @@ onUnmounted(() => {
         <article class="rounded-lg bg-white p-6 shadow">
           <p class="text-sm text-slate-500">Alerts Triggered</p>
           <p class="mt-3 text-3xl font-semibold text-amber-600">{{ summary.warning_count }}</p>
+        </article>
+        <article class="rounded-lg bg-white p-6 shadow">
+          <p class="text-sm text-slate-500">Overspent Total</p>
+          <p class="mt-3 text-3xl font-semibold text-red-600">{{ formatMoney(summary.total_overspent) }}</p>
         </article>
       </section>
 
@@ -187,7 +280,7 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in items" :key="item.category_id" class="border-b border-slate-100 text-sm">
+              <tr v-for="item in items" :key="item.category_id" class="border-b border-slate-100 text-sm" :class="focusedCategoryId === item.category_id ? 'bg-blue-50' : ''">
                 <td class="px-4 py-4 font-medium text-slate-900">{{ item.category }}</td>
                 <td class="px-4 py-4">
                   <input v-model.number="item.amount" type="number" min="0" step="0.01" placeholder="0.00" class="w-32 rounded-md border border-gray-300 px-2 py-1.5 focus:ring-2 focus:ring-blue-500" />
@@ -261,4 +354,3 @@ onUnmounted(() => {
   transform: translateY(-8px);
 }
 </style>
-

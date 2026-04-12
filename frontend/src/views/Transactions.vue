@@ -5,6 +5,8 @@ import axiosInstance from '../lib/axios';
 type Mode = 'add' | 'edit' | 'view';
 interface TransactionForm { description: string; amount: number | null; transaction_type_id: number | null; transaction_category_id: number | null; transaction_date: string; }
 interface ManagedOption { id: number; name: string; }
+interface BudgetItem { category_id: number; category: string; amount: number | null; spent: number; remaining: number | null; usage_pct: number; alert_level: 'none' | 'safe' | 'warning' | 'over'; }
+interface BudgetSummary { total_budget: number; total_spent: number; warning_count: number; }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const form = reactive<TransactionForm>({ description: '', amount: null, transaction_type_id: null, transaction_category_id: null, transaction_date: today() });
@@ -26,6 +28,9 @@ const totalPages = ref(1);
 const totalTransactions = ref(0);
 const displayDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 const currencyFormatter = new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', minimumFractionDigits: 2 });
+const isBudgetLoading = ref(false);
+const budgetSummary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0 });
+const budgetItems = ref<BudgetItem[]>([]);
 const typeFilter = ref('all');
 const categoryFilter = ref('all');
 const descriptionSearch = ref('');
@@ -53,6 +58,11 @@ const formatSignedAmount = (amount: unknown, type: unknown) => {
   const safeAmount = Number.isFinite(numericAmount) ? Math.abs(numericAmount) : 0;
   const prefix = type === 'income' ? '+' : '-';
   return `${prefix}${currencyFormatter.format(safeAmount)}`;
+};
+const formatMoney = (value: unknown) => {
+  const numericAmount = Number(value ?? 0);
+  const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
+  return currencyFormatter.format(safeAmount);
 };
 const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
   toastMessage.value = message;
@@ -96,6 +106,37 @@ const filteredTransactions = computed(() => {
   });
 });
 const toastClass = computed(() => (toastTone.value === 'danger' ? 'bg-red-700' : 'bg-emerald-600'));
+const budgetUsagePct = computed(() => {
+  const totalBudget = Number(budgetSummary.value.total_budget || 0);
+  const totalSpent = Number(budgetSummary.value.total_spent || 0);
+  if (totalBudget <= 0) return 0;
+  return Math.max(0, (totalSpent / totalBudget) * 100);
+});
+const budgetStatus = computed(() => {
+  const totalBudget = Number(budgetSummary.value.total_budget || 0);
+  if (totalBudget <= 0) return 'none';
+  if (budgetUsagePct.value >= 100) return 'over';
+  if (budgetSummary.value.warning_count > 0 || budgetUsagePct.value >= 80) return 'warning';
+  return 'safe';
+});
+const budgetStatusText = computed(() => {
+  if (budgetStatus.value === 'over') return 'Over Budget';
+  if (budgetStatus.value === 'warning') return 'Warning';
+  if (budgetStatus.value === 'safe') return 'On Track';
+  return 'No Budget';
+});
+const budgetStatusClass = computed(() => {
+  if (budgetStatus.value === 'over') return 'bg-red-100 text-red-700 ring-red-200';
+  if (budgetStatus.value === 'warning') return 'bg-amber-100 text-amber-700 ring-amber-200';
+  if (budgetStatus.value === 'safe') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  return 'bg-slate-100 text-slate-600 ring-slate-200';
+});
+const topBudgetAlerts = computed(() =>
+  budgetItems.value
+    .filter((item) => item.alert_level === 'warning' || item.alert_level === 'over')
+    .sort((a, b) => Number(b.usage_pct) - Number(a.usage_pct))
+    .slice(0, 3),
+);
 
 const loadTransactions = async (page = 1) => {
   isLoading.value = true;
@@ -106,6 +147,18 @@ const loadTransactions = async (page = 1) => {
     totalTransactions.value = data.total;
     currentPage.value = data.current_page;
   } catch (error) { console.error(error); } finally { isLoading.value = false; }
+};
+const currentMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+const loadBudgetSnapshot = async () => {
+  isBudgetLoading.value = true;
+  try {
+    const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth() } });
+    budgetSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0 };
+    budgetItems.value = data.items || [];
+  } catch (error) { console.error(error); } finally { isBudgetLoading.value = false; }
 };
 
 const loadOptions = async () => {
@@ -145,9 +198,10 @@ const saveTransaction = async () => {
     const payload = { description: form.description, amount: form.amount, transaction_type_id: form.transaction_type_id, transaction_category_id: form.transaction_category_id, transaction_date: form.transaction_date };
     if (isEditing) await axiosInstance.patch(`/transactions/${selectedTransaction.value.id}`, payload);
     else await axiosInstance.post('/transactions', payload);
-    await loadTransactions();
-    resetForm();
     showModal.value = false;
+    await loadTransactions();
+    await loadBudgetSnapshot();
+    resetForm();
     showToastMessage(isEditing ? 'Transaction updated successfully.' : 'Transaction added successfully.', 'success');
   } catch (error: any) {
     if (error?.response?.status === 422) Object.assign(errors, { ...errors, ...error.response.data.errors });
@@ -159,8 +213,9 @@ const deleteTransaction = async () => {
   isDeleting.value = true;
   try {
     await axiosInstance.delete(`/transactions/${selectedTransaction.value.id}`);
-    await loadTransactions(currentPage.value);
     showConfirmDelete.value = false;
+    await loadTransactions(currentPage.value);
+    await loadBudgetSnapshot();
     selectedTransaction.value = null;
     showToastMessage('Transaction deleted successfully.', 'danger');
   } catch (error) { console.error(error); } finally { isDeleting.value = false; }
@@ -171,7 +226,7 @@ const nextPage = () => { if (currentPage.value < totalPages.value) goToPage(curr
 const prevPage = () => { if (currentPage.value > 1) goToPage(currentPage.value - 1); };
 
 onMounted(async () => {
-  await Promise.all([loadTransactions(), loadOptions()]);
+  await Promise.all([loadTransactions(), loadOptions(), loadBudgetSnapshot()]);
   if (!form.transaction_type_id) form.transaction_type_id = defaultTypeId();
 });
 
@@ -364,8 +419,69 @@ onUnmounted(() => {
         </section>
 
         <section class="rounded-lg bg-white p-6 shadow lg:col-span-1">
-          <h2 class="text-xl font-semibold text-slate-900">New Section</h2>
-          <p class="mt-1 text-sm text-slate-500">New Section content goes here.</p>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-semibold text-slate-900">Budget Snapshot</h2>
+              <p class="mt-1 text-sm text-slate-500">Track this month's budget and alerts.</p>
+            </div>
+            <span class="rounded-full px-3 py-1 text-xs font-medium ring-1" :class="budgetStatusClass">{{ budgetStatusText }}</span>
+          </div>
+
+          <div v-if="!isBudgetLoading" class="mt-5 space-y-5">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs uppercase tracking-wide text-slate-500">Total Budget</p>
+                <p class="mt-1 text-base font-semibold text-slate-900">{{ formatMoney(budgetSummary.total_budget) }}</p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs uppercase tracking-wide text-slate-500">Total Spent</p>
+                <p class="mt-1 text-base font-semibold text-slate-900">{{ formatMoney(budgetSummary.total_spent) }}</p>
+              </div>
+            </div>
+
+            <div>
+              <div class="mb-1 flex items-center justify-between text-xs">
+                <span class="text-slate-500">Usage</span>
+                <span class="font-medium text-slate-700">{{ Number(budgetUsagePct).toFixed(1) }}%</span>
+              </div>
+              <div class="h-2.5 rounded-full bg-slate-200">
+                <div class="h-2.5 rounded-full transition-all"
+                  :class="budgetStatus === 'over' ? 'bg-red-600' : budgetStatus === 'warning' ? 'bg-amber-500' : budgetStatus === 'safe' ? 'bg-emerald-500' : 'bg-slate-400'"
+                  :style="{ width: `${Math.min(Math.max(budgetUsagePct, 0), 100)}%` }"></div>
+              </div>
+            </div>
+
+            <div v-if="topBudgetAlerts.length">
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Active Alerts</p>
+              <div class="space-y-2">
+                <RouterLink
+                  v-for="item in topBudgetAlerts"
+                  :key="item.category_id"
+                  :to="{ path: '/budgets', query: { month: currentMonth(), category_id: item.category_id } }"
+                  class="block rounded-xl border px-3 py-2 hover:opacity-95"
+                  :class="item.alert_level === 'over' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="font-medium text-slate-900">{{ item.category }}</span>
+                    <span :class="item.alert_level === 'over' ? 'text-red-700' : 'text-amber-700'">{{ Number(item.usage_pct).toFixed(1) }}%</span>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-600">
+                    {{ item.remaining != null && item.remaining < 0 ? `Over by ${formatMoney(Math.abs(item.remaining))}` : `Remaining ${formatMoney(item.remaining ?? 0)}` }}
+                  </p>
+                </RouterLink>
+              </div>
+            </div>
+            <div v-else class="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">No active budget alerts. Nice work.</div>
+
+            <RouterLink :to="{ path: '/budgets', query: { month: currentMonth() } }" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+              Manage Budgets
+            </RouterLink>
+          </div>
+
+          <div v-else class="mt-5 space-y-3">
+            <div class="h-16 animate-pulse rounded-xl bg-slate-100"></div>
+            <div class="h-16 animate-pulse rounded-xl bg-slate-100"></div>
+            <div class="h-10 animate-pulse rounded-xl bg-slate-100"></div>
+          </div>
         </section>
       </div>
 
@@ -410,14 +526,6 @@ onUnmounted(() => {
       </transition>
     </Teleport>
 
-    <Teleport to="body">
-      <div v-if="isSubmitting" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50">
-        <div class="relative z-[111] flex flex-col items-center rounded-lg bg-white p-6 shadow-xl"><span
-            class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></span>
-          <p class="text-lg font-medium text-slate-900">Saving transaction...</p>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
