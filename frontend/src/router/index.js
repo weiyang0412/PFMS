@@ -6,6 +6,7 @@ import Dashboard from '../views/auth/Dashboard.vue'
 import Accounts from '../views/Accounts.vue'
 import Transactions from '../views/Transactions.vue'
 import TransactionOptions from '../views/TransactionOptions.vue'
+import Budgets from '../views/Budgets.vue'
 import { useUserStore } from '../stores/userStore'
 
 const router = createRouter({
@@ -51,6 +52,12 @@ const router = createRouter({
             path: "/transaction-options",
             name: "transaction-options",
             component: TransactionOptions,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/budgets",
+            name: "budgets",
+            component: Budgets,
             meta: { requiresAuth: true },
         },
     ],

@@ -12,6 +12,7 @@ use Laravel\Sanctum\HasApiTokens;
 use App\Models\TransactionCategory;
 use App\Models\Transaction;
 use App\Models\TransactionType;
+use App\Models\Budget;
 
 class User extends Authenticatable
 {
@@ -65,5 +66,10 @@ class User extends Authenticatable
     public function transactionCategories(): HasMany
     {
         return $this->hasMany(TransactionCategory::class);
+    }
+
+    public function budgets(): HasMany
+    {
+        return $this->hasMany(Budget::class);
     }
 }

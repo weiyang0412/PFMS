@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionOptionController;
@@ -45,4 +46,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/transaction-options/types/{transactionType}', [TransactionOptionController::class, 'destroyType']);
     Route::post('/transaction-options/categories', [TransactionOptionController::class, 'storeCategory']);
     Route::delete('/transaction-options/categories/{transactionCategory}', [TransactionOptionController::class, 'destroyCategory']);
+
+    Route::get('/budgets', [BudgetController::class, 'index']);
+    Route::post('/budgets', [BudgetController::class, 'store']);
+    Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy']);
 });

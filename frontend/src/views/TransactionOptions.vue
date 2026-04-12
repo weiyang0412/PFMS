@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import axiosInstance from '../lib/axios';
 
 interface ManagedOption {
@@ -20,6 +20,20 @@ const isTypeSubmitting = ref(false);
 const isCategorySubmitting = ref(false);
 const deletingTypeId = ref<number | null>(null);
 const deletingCategoryId = ref<number | null>(null);
+const showToast = ref(false);
+const toastMessage = ref('');
+const toastTone = ref<'success' | 'danger'>('success');
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
+  toastMessage.value = message;
+  toastTone.value = tone;
+  showToast.value = true;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    showToast.value = false;
+  }, 2600);
+};
 
 const loadOptions = async () => {
   isLoading.value = true;
@@ -49,6 +63,7 @@ const createType = async () => {
     await axiosInstance.post('/transaction-options/types', { name });
     newTypeName.value = '';
     await loadOptions();
+    showToastMessage('Type added successfully.', 'success');
   } catch (error: any) {
     optionErrors.type = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save type.';
   } finally {
@@ -71,6 +86,7 @@ const createCategory = async () => {
     await axiosInstance.post('/transaction-options/categories', { name });
     newCategoryName.value = '';
     await loadOptions();
+    showToastMessage('Category added successfully.', 'success');
   } catch (error: any) {
     optionErrors.category = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save category.';
   } finally {
@@ -85,6 +101,7 @@ const removeType = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/types/${option.id}`);
     await loadOptions();
+    showToastMessage('Type deleted successfully.', 'danger');
   } catch (error: any) {
     optionErrors.type = error?.response?.data?.message || 'Unable to delete type.';
   } finally {
@@ -99,6 +116,7 @@ const removeCategory = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/categories/${option.id}`);
     await loadOptions();
+    showToastMessage('Category deleted successfully.', 'danger');
   } catch (error: any) {
     optionErrors.category = error?.response?.data?.message || 'Unable to delete category.';
   } finally {
@@ -109,17 +127,21 @@ const removeCategory = async (option: ManagedOption) => {
 onMounted(() => {
   loadOptions();
 });
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+});
 </script>
 
 <template>
-  <div class="h-full w-full bg-slate-100 p-6">
-    <div class="space-y-6">
+  <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
+    <div class="h-full w-full space-y-6">
       <section class="rounded-lg bg-white p-6 shadow">
         <h1 class="text-3xl font-semibold text-slate-900">Manage Transaction Options</h1>
         <p class="mt-2 text-sm text-slate-500">Create the type and category lists that appear in your add transaction form.</p>
       </section>
 
-      <div v-if="!isLoading" class="grid gap-6 lg:grid-cols-2">
+      <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-lg bg-white p-6 shadow">
           <h2 class="text-xl font-semibold text-slate-900">Types</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Income, Expense, Transfer.</p>
@@ -140,7 +162,7 @@ onMounted(() => {
             </button>
           </div>
           <p v-if="optionErrors.type" class="mt-2 text-xs text-red-600">{{ optionErrors.type }}</p>
-          <div class="mt-6 flex flex-wrap gap-2">
+          <div v-if="typeOptions.length" class="mt-6 flex flex-wrap gap-2">
             <div
               v-for="option in typeOptions"
               :key="option.id"
@@ -157,6 +179,7 @@ onMounted(() => {
               </button>
             </div>
           </div>
+          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No types yet. Add one above.</p>
         </section>
 
         <section class="rounded-lg bg-white p-6 shadow">
@@ -196,7 +219,7 @@ onMounted(() => {
               </button>
             </div>
           </div>
-          <p v-else class="mt-6 text-sm text-slate-500">No categories yet. Add one above.</p>
+          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No categories yet. Add one above.</p>
         </section>
       </div>
 
@@ -212,6 +235,31 @@ onMounted(() => {
           </div>
         </div>
       </Teleport>
+
+      <Teleport to="body">
+        <transition name="toast-fade">
+          <div
+            v-if="showToast"
+            class="pointer-events-none fixed bottom-6 right-6 z-[130] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-xl"
+            :class="toastTone === 'danger' ? 'bg-red-700' : 'bg-emerald-600'"
+          >
+            {{ toastMessage }}
+          </div>
+        </transition>
+      </Teleport>
     </div>
   </div>
 </template>
+
+<style scoped>
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>

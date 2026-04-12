@@ -16,7 +16,9 @@ class TransactionController extends Controller
         $query = $request->user()
             ->transactions()
             ->with(['transactionType:id,name', 'transactionCategory:id,name'])
-            ->latest('transaction_date');
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         $transactions = $query->paginate($perPage, ['*'], 'page', $page);
         $transactions->through(function ($transaction) {

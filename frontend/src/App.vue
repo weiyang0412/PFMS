@@ -148,6 +148,14 @@ onBeforeUnmount(() => {
               <span :class="sidebarLabelClasses">Manage Options</span>
             </RouterLink>
           </li>
+          <li>
+            <RouterLink to="/budgets" :class="sidebarItemClasses">
+              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8M8 12h5M6 3h12a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" />
+              </svg>
+              <span :class="sidebarLabelClasses">Budget & Alerts</span>
+            </RouterLink>
+          </li>
           <!-- Financial Analytics -->
           <li>
             <RouterLink to="/dashboard" :class="sidebarItemClasses">

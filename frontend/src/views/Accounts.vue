@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import axiosInstance from '../lib/axios';
 
 type Mode = 'add' | 'edit';
@@ -23,6 +23,10 @@ const showModal = ref(false);
 const showConfirmDelete = ref(false);
 const mode = ref<Mode>('add');
 const selectedAccount = ref<AccountItem | null>(null);
+const showToast = ref(false);
+const toastMessage = ref('');
+const toastTone = ref<'success' | 'danger'>('success');
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const form = reactive<AccountForm>({
   name: '',
@@ -56,6 +60,16 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+
+const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
+  toastMessage.value = message;
+  toastTone.value = tone;
+  showToast.value = true;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    showToast.value = false;
+  }, 2600);
+};
 
 const loadAccounts = async () => {
   isLoading.value = true;
@@ -115,6 +129,7 @@ const saveAccount = async () => {
     await loadAccounts();
     showModal.value = false;
     resetForm();
+    showToastMessage(mode.value === 'edit' ? 'Account updated successfully.' : 'Account added successfully.', 'success');
   } catch (error: any) {
     if (error?.response?.status === 422) {
       Object.assign(errors, { ...errors, ...error.response.data.errors });
@@ -135,6 +150,7 @@ const deleteAccount = async () => {
     await loadAccounts();
     showConfirmDelete.value = false;
     selectedAccount.value = null;
+    showToastMessage('Account deleted successfully.', 'danger');
   } catch (error) {
     console.error(error);
   } finally {
@@ -144,6 +160,10 @@ const deleteAccount = async () => {
 
 onMounted(() => {
   loadAccounts();
+});
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
 });
 </script>
 
@@ -364,6 +384,31 @@ onMounted(() => {
           </div>
         </div>
       </Teleport>
+
+      <Teleport to="body">
+        <transition name="toast-fade">
+          <div
+            v-if="showToast"
+            class="pointer-events-none fixed bottom-6 right-6 z-[130] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-xl"
+            :class="toastTone === 'danger' ? 'bg-red-700' : 'bg-emerald-600'"
+          >
+            {{ toastMessage }}
+          </div>
+        </transition>
+      </Teleport>
     </div>
   </div>
 </template>
+
+<style scoped>
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>

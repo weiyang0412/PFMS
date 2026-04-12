@@ -3,50 +3,146 @@ import { computed, onMounted, ref } from 'vue';
 import axiosInstance from '../../lib/axios';
 import { useUserStore } from '../../stores/userStore';
 
-const userStore = useUserStore();
-const isLoading = ref(false);
-const loadError = ref('');
-const summary = ref<any>(null);
+interface DashboardOverview {
+  total_balance: number;
+  account_count: number;
+  monthly_income: number;
+  monthly_expense: number;
+  net_cashflow: number;
+  savings_rate: number;
+  income_change_pct: number;
+  expense_change_pct: number;
+}
 
-const overview = computed(() => summary.value?.overview ?? {});
-const accounts = computed(() => summary.value?.accounts ?? []);
-const trend = computed(() => summary.value?.monthly_trend ?? []);
-const categories = computed(() => summary.value?.category_breakdown ?? []);
-const recent = computed(() => summary.value?.recent_transactions ?? []);
-const insights = computed(() => summary.value?.insights ?? {});
-const period = computed(() => summary.value?.period ?? {});
-const maxTrend = computed(() => Math.max(...trend.value.flatMap((item: any) => [item.income, item.expense]), 1));
+interface DashboardAccount {
+  id: number;
+  name: string;
+  balance: number;
+}
+
+interface DashboardTrendItem {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+interface DashboardCategoryItem {
+  category: string;
+  amount: number;
+  percentage: number;
+}
+
+interface DashboardRecentItem {
+  id: number;
+  description: string;
+  category: string;
+  type: 'income' | 'expense';
+  amount: number;
+  transaction_date: string;
+}
+
+interface DashboardInsights {
+  largest_expense_category: string | null;
+  largest_expense_amount: number;
+  average_expense: number;
+  transactions_this_month: number;
+}
+
+interface DashboardPeriod {
+  label: string;
+  updated_at: string;
+}
+
+interface DashboardSummary {
+  overview: DashboardOverview;
+  accounts: DashboardAccount[];
+  monthly_trend: DashboardTrendItem[];
+  category_breakdown: DashboardCategoryItem[];
+  recent_transactions: DashboardRecentItem[];
+  insights: DashboardInsights;
+  period: DashboardPeriod;
+}
+
+const defaultOverview: DashboardOverview = {
+  total_balance: 0,
+  account_count: 0,
+  monthly_income: 0,
+  monthly_expense: 0,
+  net_cashflow: 0,
+  savings_rate: 0,
+  income_change_pct: 0,
+  expense_change_pct: 0,
+};
+
+const defaultInsights: DashboardInsights = {
+  largest_expense_category: null,
+  largest_expense_amount: 0,
+  average_expense: 0,
+  transactions_this_month: 0,
+};
+
+const defaultPeriod: DashboardPeriod = {
+  label: 'this month',
+  updated_at: '',
+};
+
+const userStore = useUserStore();
+const isInitialLoading = ref(false);
+const isRefreshing = ref(false);
+const loadError = ref('');
+const summary = ref<DashboardSummary | null>(null);
+
+const overview = computed<DashboardOverview>(() => summary.value?.overview ?? defaultOverview);
+const accounts = computed<DashboardAccount[]>(() => summary.value?.accounts ?? []);
+const trend = computed<DashboardTrendItem[]>(() => summary.value?.monthly_trend ?? []);
+const categories = computed<DashboardCategoryItem[]>(() => summary.value?.category_breakdown ?? []);
+const recent = computed<DashboardRecentItem[]>(() => summary.value?.recent_transactions ?? []);
+const insights = computed<DashboardInsights>(() => summary.value?.insights ?? defaultInsights);
+const period = computed<DashboardPeriod>(() => summary.value?.period ?? defaultPeriod);
+const maxTrend = computed(() => {
+  const values = trend.value.flatMap((item) => [Number(item.income) || 0, Number(item.expense) || 0]);
+  return Math.max(1, ...values);
+});
 
 const money = (value = 0) =>
   new Intl.NumberFormat('en-MY', {
     style: 'currency',
     currency: 'MYR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const shortDate = (value = '') =>
-  value
-    ? new Intl.DateTimeFormat('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value))
-    : '-';
+const shortDate = (value = '') => {
+  if (!value || typeof value !== 'string') return '-';
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return '-';
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return new Intl.DateTimeFormat('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }).format(parsed);
+};
 
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 
-const loadDashboard = async () => {
-  isLoading.value = true;
+const loadDashboard = async (manualRefresh = false) => {
+  if (manualRefresh) isRefreshing.value = true;
+  else if (!summary.value) isInitialLoading.value = true;
   loadError.value = '';
   try {
-    const { data } = await axiosInstance.get('/dashboard/summary');
+    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary');
     summary.value = data;
   } catch (error) {
     console.error(error);
     loadError.value = 'Unable to load dashboard data right now.';
   } finally {
-    isLoading.value = false;
+    isInitialLoading.value = false;
+    isRefreshing.value = false;
   }
 };
 
-onMounted(loadDashboard);
+onMounted(() => {
+  loadDashboard();
+});
 </script>
 
 <template>
@@ -60,8 +156,18 @@ onMounted(loadDashboard);
             <p class="mt-2 text-sm text-slate-300">Live data from your accounts and transactions for {{ period.label ??
               'this month' }}.</p>
           </div>
-          <div class="rounded-2xl bg-white/5 px-4 py-3 text-sm text-slate-300">
-            Updated {{ shortDate(period.updated_at) }}
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              @click="loadDashboard(true)"
+              :disabled="isRefreshing"
+              class="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+            </button>
+            <div class="rounded-2xl bg-white/5 px-4 py-3 text-sm text-slate-300">
+              Updated {{ shortDate(period.updated_at) }}
+            </div>
           </div>
         </div>
         <div v-if="loadError" class="mt-6 rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-100">{{ loadError }}</div>
@@ -112,8 +218,12 @@ onMounted(loadDashboard);
               </div>
             </div>
           </div>
-          <div v-else class="mt-6 rounded-[24px] bg-slate-50 p-6 text-sm text-slate-500">Add some transactions to see
-            the trend chart.</div>
+          <div v-else class="mt-6 rounded-[24px] bg-slate-50 p-6 text-sm text-slate-500">
+            <p>Add some transactions to see the trend chart.</p>
+            <RouterLink to="/transactions" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+              Go to Transactions
+            </RouterLink>
+          </div>
         </article>
 
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
@@ -132,8 +242,12 @@ onMounted(loadDashboard);
               </div>
             </div>
           </div>
-          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">No accounts yet. Add one to track
-            your real balance.</div>
+          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+            <p>No accounts yet. Add one to track your real balance.</p>
+            <RouterLink to="/accounts" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+              Go to Accounts
+            </RouterLink>
+          </div>
         </article>
       </section>
 
@@ -153,8 +267,12 @@ onMounted(loadDashboard);
               </div>
             </div>
           </div>
-          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">No expense categories yet for this
-            month.</div>
+          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+            <p>No expense categories yet for this month.</p>
+            <RouterLink to="/transactions" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+              Add Transactions
+            </RouterLink>
+          </div>
         </article>
 
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
@@ -221,20 +339,24 @@ onMounted(loadDashboard);
                 <td class="py-4 text-slate-500">{{ item.category }}</td>
                 <td class="py-4 text-slate-500">{{ shortDate(item.transaction_date) }}</td>
                 <td class="py-4 text-right font-semibold"
-                  :class="item.type === 'income' ? 'text-emerald-600' : 'text-slate-900'">
+                  :class="item.type === 'income' ? 'text-emerald-600' : 'text-red-600'">
                   {{ item.type === 'income' ? '+' : '-' }}{{ money(item.amount) }}
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">No transactions yet. Add some to
-          populate the dashboard.</div>
+        <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+          <p>No transactions yet. Add some to populate the dashboard.</p>
+          <RouterLink to="/transactions" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+            Go to Transactions
+          </RouterLink>
+        </div>
       </section>
     </div>
 
     <Teleport to="body">
-      <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+      <div v-if="isInitialLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
         <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
           <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
           <p class="text-lg font-semibold text-slate-900">Loading ...</p>
