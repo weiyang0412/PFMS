@@ -113,4 +113,28 @@ class BudgetApiTest extends TestCase
             'alert_threshold' => 85,
         ]);
     }
+
+    public function test_budget_index_excludes_income_only_categories_without_budgets(): void
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        TransactionCategory::create([
+            'user_id' => $user->id,
+            'name' => 'Salary',
+            'applies_to' => 'income',
+        ]);
+
+        TransactionCategory::create([
+            'user_id' => $user->id,
+            'name' => 'Food',
+            'applies_to' => 'expense',
+        ]);
+
+        $response = $this->getJson('/api/budgets?month=2026-04');
+
+        $response->assertOk();
+        $response->assertJsonMissing(['category' => 'Salary']);
+        $response->assertJsonFragment(['category' => 'Food']);
+    }
 }

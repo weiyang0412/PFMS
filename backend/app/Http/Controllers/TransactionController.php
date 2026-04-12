@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Models\TransactionCategory;
+use App\Models\TransactionType;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class TransactionController extends Controller
 {
@@ -72,7 +75,7 @@ class TransactionController extends Controller
     {
         $this->ensureDefaultTypes($request);
 
-        return $request->validate([
+        $validated = $request->validate([
             'description' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
             'transaction_type_id' => [
@@ -87,6 +90,30 @@ class TransactionController extends Controller
             ],
             'transaction_date' => 'required|date',
         ]);
+
+        if (!empty($validated['transaction_category_id'])) {
+            $transactionTypeCode = TransactionType::typeCode($request->user()
+                ->transactionTypes()
+                ->whereKey($validated['transaction_type_id'])
+                ->value('name'));
+            $transactionTypeName = TransactionType::typeName($transactionTypeCode);
+
+            if (in_array($transactionTypeName, ['income', 'expense'], true)) {
+                $appliesToRaw = $request->user()
+                    ->transactionCategories()
+                    ->whereKey($validated['transaction_category_id'])
+                    ->value('applies_to');
+                $appliesTo = TransactionCategory::appliesToName($appliesToRaw);
+
+                if ($appliesTo !== 'both' && $appliesTo !== $transactionTypeName) {
+                    throw ValidationException::withMessages([
+                        'transaction_category_id' => ['Selected category is not valid for the chosen type.'],
+                    ]);
+                }
+            }
+        }
+
+        return $validated;
     }
 
     private function ensureDefaultTypes(Request $request): void
@@ -95,8 +122,8 @@ class TransactionController extends Controller
             return;
         }
 
-        foreach (['income', 'expense'] as $name) {
-            $request->user()->transactionTypes()->create(['name' => $name]);
+        foreach ([TransactionType::TYPE_INCOME, TransactionType::TYPE_EXPENSE] as $typeCode) {
+            $request->user()->transactionTypes()->create(['name' => $typeCode]);
         }
     }
 }

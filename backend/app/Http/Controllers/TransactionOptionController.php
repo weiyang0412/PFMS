@@ -23,11 +23,12 @@ class TransactionOptionController extends Controller
     public function storeType(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100',
+            'name' => 'required|in:income,expense,1,3',
         ]);
 
+        $typeCode = TransactionType::typeCode($validated['name']);
         $type = $request->user()->transactionTypes()->firstOrCreate([
-            'name' => trim($validated['name']),
+            'name' => $typeCode,
         ]);
 
         return response()->json($type, 201);
@@ -63,10 +64,30 @@ class TransactionOptionController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:100',
+            'applies_to' => 'nullable|in:income,expense,both,0,1,3',
         ]);
 
-        $category = $request->user()->transactionCategories()->firstOrCreate([
-            'name' => trim($validated['name']),
+        $name = trim($validated['name']);
+        $appliesTo = $validated['applies_to'] ?? TransactionCategory::APPLIES_TO_BOTH;
+        $requestedAppliesTo = TransactionCategory::appliesToName($appliesTo);
+        $category = $request->user()
+            ->transactionCategories()
+            ->where('name', $name)
+            ->first();
+
+        if ($category) {
+            $currentAppliesTo = TransactionCategory::appliesToName($category->getRawOriginal('applies_to'));
+            if ($currentAppliesTo !== $requestedAppliesTo) {
+                $category->applies_to = TransactionCategory::APPLIES_TO_BOTH;
+                $category->save();
+            }
+
+            return response()->json($category);
+        }
+
+        $category = $request->user()->transactionCategories()->create([
+            'name' => $name,
+            'applies_to' => $appliesTo,
         ]);
 
         return response()->json($category, 201);
@@ -98,8 +119,8 @@ class TransactionOptionController extends Controller
             return;
         }
 
-        foreach (['income', 'expense'] as $name) {
-            $user->transactionTypes()->create(['name' => $name]);
+        foreach ([TransactionType::TYPE_INCOME, TransactionType::TYPE_EXPENSE] as $typeCode) {
+            $user->transactionTypes()->create(['name' => $typeCode]);
         }
     }
 }

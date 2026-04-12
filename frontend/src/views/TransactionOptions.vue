@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import axiosInstance from '../lib/axios';
+import { useToast } from '../composables/useToast.js';
 
 interface ManagedOption {
   id: number;
   name: string;
+  applies_to?: 'income' | 'expense' | 'both';
 }
 
 const typeOptions = ref<ManagedOption[]>([]);
 const categoryOptions = ref<ManagedOption[]>([]);
 const newTypeName = ref('');
 const newCategoryName = ref('');
+const newCategoryAppliesTo = ref<'income' | 'expense' | 'both'>('both');
 const optionErrors = reactive({
   type: '',
   category: '',
@@ -20,20 +23,7 @@ const isTypeSubmitting = ref(false);
 const isCategorySubmitting = ref(false);
 const deletingTypeId = ref<number | null>(null);
 const deletingCategoryId = ref<number | null>(null);
-const showToast = ref(false);
-const toastMessage = ref('');
-const toastTone = ref<'success' | 'danger'>('success');
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
-
-const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
-  toastMessage.value = message;
-  toastTone.value = tone;
-  showToast.value = true;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    showToast.value = false;
-  }, 2600);
-};
+const toast = useToast();
 
 const loadOptions = async () => {
   isLoading.value = true;
@@ -63,7 +53,7 @@ const createType = async () => {
     await axiosInstance.post('/transaction-options/types', { name });
     newTypeName.value = '';
     await loadOptions();
-    showToastMessage('Type added successfully.', 'success');
+    toast.show('Type added successfully.', 'success');
   } catch (error: any) {
     optionErrors.type = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save type.';
   } finally {
@@ -83,10 +73,14 @@ const createCategory = async () => {
   isCategorySubmitting.value = true;
 
   try {
-    await axiosInstance.post('/transaction-options/categories', { name });
+    await axiosInstance.post('/transaction-options/categories', {
+      name,
+      applies_to: newCategoryAppliesTo.value,
+    });
     newCategoryName.value = '';
+    newCategoryAppliesTo.value = 'both';
     await loadOptions();
-    showToastMessage('Category added successfully.', 'success');
+    toast.show('Category added successfully.', 'success');
   } catch (error: any) {
     optionErrors.category = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save category.';
   } finally {
@@ -101,7 +95,7 @@ const removeType = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/types/${option.id}`);
     await loadOptions();
-    showToastMessage('Type deleted successfully.', 'danger');
+    toast.show('Type deleted successfully.', 'danger');
   } catch (error: any) {
     optionErrors.type = error?.response?.data?.message || 'Unable to delete type.';
   } finally {
@@ -116,7 +110,7 @@ const removeCategory = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/categories/${option.id}`);
     await loadOptions();
-    showToastMessage('Category deleted successfully.', 'danger');
+    toast.show('Category deleted successfully.', 'danger');
   } catch (error: any) {
     optionErrors.category = error?.response?.data?.message || 'Unable to delete category.';
   } finally {
@@ -128,9 +122,17 @@ onMounted(() => {
   loadOptions();
 });
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer);
-});
+const categoryScopeLabel = (value: ManagedOption['applies_to']) => {
+  if (value === 'income') return 'Income';
+  if (value === 'expense') return 'Expense';
+  return 'Both';
+};
+
+const categoryScopeClass = (value: ManagedOption['applies_to']) => {
+  if (value === 'income') return 'bg-emerald-100 text-emerald-700';
+  if (value === 'expense') return 'bg-rose-100 text-rose-700';
+  return 'bg-slate-200 text-slate-700';
+};
 </script>
 
 <template>
@@ -185,13 +187,21 @@ onUnmounted(() => {
         <section class="rounded-lg bg-white p-6 shadow">
           <h2 class="text-xl font-semibold text-slate-900">Categories</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Food, Transport, Salary.</p>
-          <div class="mt-4 flex gap-2">
+          <div class="mt-4 flex flex-col gap-2 sm:flex-row">
             <input
               v-model="newCategoryName"
               type="text"
               class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
               placeholder="Add a new category"
             />
+            <select
+              v-model="newCategoryAppliesTo"
+              class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="both">Both</option>
+              <option value="expense">Expense only</option>
+              <option value="income">Income only</option>
+            </select>
             <button
               type="button"
               @click="createCategory"
@@ -209,6 +219,12 @@ onUnmounted(() => {
               class="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
             >
               <span>{{ option.name }}</span>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                :class="categoryScopeClass(option.applies_to)"
+              >
+                {{ categoryScopeLabel(option.applies_to) }}
+              </span>
               <button
                 type="button"
                 @click="removeCategory(option)"
@@ -236,30 +252,6 @@ onUnmounted(() => {
         </div>
       </Teleport>
 
-      <Teleport to="body">
-        <transition name="toast-fade">
-          <div
-            v-if="showToast"
-            class="pointer-events-none fixed bottom-6 right-6 z-[130] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-xl"
-            :class="toastTone === 'danger' ? 'bg-red-700' : 'bg-emerald-600'"
-          >
-            {{ toastMessage }}
-          </div>
-        </transition>
-      </Teleport>
     </div>
   </div>
 </template>
-
-<style scoped>
-.toast-fade-enter-active,
-.toast-fade-leave-active {
-  transition: all 0.2s ease;
-}
-
-.toast-fade-enter-from,
-.toast-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-</style>

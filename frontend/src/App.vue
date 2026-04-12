@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router';
 import { useUserStore } from './stores/userStore';
 import appLogo from './assets/logo.png';
+import ToastContainer from './components/ToastContainer.vue';
 
 // const user = ref<{ name: string; email: string } | null>(null);
 // const isAuthenticated = ref(false);
@@ -248,5 +249,7 @@ onBeforeUnmount(() => {
         <p class="text-lg font-medium text-gray-900">Logging out...</p>
       </div>
     </div>
+
+    <ToastContainer />
   </div>
 </template>

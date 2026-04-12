@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Budget;
+use App\Models\TransactionCategory;
+use App\Models\TransactionType;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -26,7 +28,7 @@ class BudgetController extends Controller
             ->transactions()
             ->whereNotNull('transaction_category_id')
             ->whereBetween('transaction_date', [$monthStart, $monthEnd])
-            ->whereHas('transactionType', fn ($query) => $query->whereRaw('LOWER(name) = ?', ['expense']))
+            ->whereHas('transactionType', fn ($query) => $query->where('name', TransactionType::TYPE_EXPENSE))
             ->selectRaw('transaction_category_id, SUM(amount) as spent')
             ->groupBy('transaction_category_id')
             ->pluck('spent', 'transaction_category_id');
@@ -37,6 +39,19 @@ class BudgetController extends Controller
 
         if ($onlyBudgeted) {
             $categoryQuery->whereIn('id', $budgets->keys()->all());
+        } else {
+            $budgetedCategoryIds = $budgets->keys()->all();
+            $categoryQuery->where(function ($query) use ($budgetedCategoryIds) {
+                $query
+                    ->whereIn('applies_to', [
+                        TransactionCategory::APPLIES_TO_EXPENSE,
+                        TransactionCategory::APPLIES_TO_BOTH,
+                    ])
+                    ->orWhereNull('applies_to');
+                if (!empty($budgetedCategoryIds)) {
+                    $query->orWhereIn('id', $budgetedCategoryIds);
+                }
+            });
         }
 
         $items = $categoryQuery

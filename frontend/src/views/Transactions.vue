@@ -1,12 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import axiosInstance from '../lib/axios';
+import { useToast } from '../composables/useToast.js';
+import { formatCurrencyMYR, formatYmdDate } from '../lib/formatters.js';
 
 type Mode = 'add' | 'edit' | 'view';
 interface TransactionForm { description: string; amount: number | null; transaction_type_id: number | null; transaction_category_id: number | null; transaction_date: string; }
-interface ManagedOption { id: number; name: string; }
-interface BudgetItem { category_id: number; category: string; amount: number | null; spent: number; remaining: number | null; usage_pct: number; alert_level: 'none' | 'safe' | 'warning' | 'over'; }
-interface BudgetSummary { total_budget: number; total_spent: number; warning_count: number; }
+interface ManagedOption {
+  id: number;
+  name: string;
+  applies_to?: 'income' | 'expense' | 'both';
+}
+interface BudgetItem {
+  category_id: number;
+  category: string;
+  budget_id: number | null;
+  amount: number | null;
+  alert_threshold: number;
+  spent: number;
+  remaining: number | null;
+  usage_pct: number;
+  alert_level: 'none' | 'safe' | 'warning' | 'over';
+}
+interface BudgetSummary {
+  total_budget: number;
+  total_spent: number;
+  warning_count: number;
+  total_overspent: number;
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 const form = reactive<TransactionForm>({ description: '', amount: null, transaction_type_id: null, transaction_category_id: null, transaction_date: today() });
@@ -26,18 +48,14 @@ const currentPage = ref(1);
 const perPage = ref(10);
 const totalPages = ref(1);
 const totalTransactions = ref(0);
-const displayDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-const currencyFormatter = new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', minimumFractionDigits: 2 });
 const isBudgetLoading = ref(false);
-const budgetSummary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0 });
+const budgetSummary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const budgetItems = ref<BudgetItem[]>([]);
 const typeFilter = ref('all');
 const categoryFilter = ref('all');
 const descriptionSearch = ref('');
-const showToast = ref(false);
-const toastMessage = ref('');
-const toastTone = ref<'success' | 'danger'>('success');
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
+const toast = useToast();
+const route = useRoute();
 
 const clearFormErrors = () => Object.keys(errors).forEach((key) => { errors[key] = []; });
 const defaultTypeId = () => typeOptions.value[0]?.id ?? null;
@@ -50,26 +68,16 @@ const parseTransactionDate = (value: unknown) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 const formatDisplayDate = (value: unknown) => {
-  const parsed = parseTransactionDate(value);
-  return parsed ? displayDateFormatter.format(parsed) : '—';
+  return formatYmdDate(value, { locale: 'en-GB', fallback: '—' });
 };
 const formatSignedAmount = (amount: unknown, type: unknown) => {
   const numericAmount = Number(amount ?? 0);
   const safeAmount = Number.isFinite(numericAmount) ? Math.abs(numericAmount) : 0;
   const prefix = type === 'income' ? '+' : '-';
-  return `${prefix}${currencyFormatter.format(safeAmount)}`;
+  return `${prefix}${formatCurrencyMYR(safeAmount)}`;
 };
 const formatMoney = (value: unknown) => {
-  const numericAmount = Number(value ?? 0);
-  const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
-  return currencyFormatter.format(safeAmount);
-};
-const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
-  toastMessage.value = message;
-  toastTone.value = tone;
-  showToast.value = true;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { showToast.value = false; }, 2600);
+  return formatCurrencyMYR(value);
 };
 const parseDateTime = (value: unknown) => {
   if (!value) return null;
@@ -105,7 +113,6 @@ const filteredTransactions = computed(() => {
     return matchesType && matchesCategory && matchesDescription;
   });
 });
-const toastClass = computed(() => (toastTone.value === 'danger' ? 'bg-red-700' : 'bg-emerald-600'));
 const budgetUsagePct = computed(() => {
   const totalBudget = Number(budgetSummary.value.total_budget || 0);
   const totalSpent = Number(budgetSummary.value.total_spent || 0);
@@ -130,6 +137,27 @@ const budgetStatusClass = computed(() => {
   if (budgetStatus.value === 'warning') return 'bg-amber-100 text-amber-700 ring-amber-200';
   if (budgetStatus.value === 'safe') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
   return 'bg-slate-100 text-slate-600 ring-slate-200';
+});
+const budgetStatusDotClass = computed(() => {
+  if (budgetStatus.value === 'over') return 'bg-red-500';
+  if (budgetStatus.value === 'warning') return 'bg-amber-500';
+  if (budgetStatus.value === 'safe') return 'bg-emerald-500';
+  return 'bg-slate-400';
+});
+const selectedTypeName = computed(() => {
+  const selectedType = typeOptions.value.find((option) => option.id === form.transaction_type_id);
+  return String(selectedType?.name || '').toLowerCase();
+});
+const filteredCategoryOptionsForForm = computed(() => {
+  const typeName = selectedTypeName.value;
+  if (!typeName) return categoryOptions.value;
+
+  if (typeName !== 'income' && typeName !== 'expense') return categoryOptions.value;
+
+  return categoryOptions.value.filter((option) => {
+    const appliesTo = option.applies_to || 'both';
+    return appliesTo === 'both' || appliesTo === typeName;
+  });
 });
 const topBudgetAlerts = computed(() =>
   budgetItems.value
@@ -156,7 +184,7 @@ const loadBudgetSnapshot = async () => {
   isBudgetLoading.value = true;
   try {
     const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth() } });
-    budgetSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0 };
+    budgetSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
     budgetItems.value = data.items || [];
   } catch (error) { console.error(error); } finally { isBudgetLoading.value = false; }
 };
@@ -202,7 +230,7 @@ const saveTransaction = async () => {
     await loadTransactions();
     await loadBudgetSnapshot();
     resetForm();
-    showToastMessage(isEditing ? 'Transaction updated successfully.' : 'Transaction added successfully.', 'success');
+    toast.show(isEditing ? 'Transaction updated successfully.' : 'Transaction added successfully.', 'success');
   } catch (error: any) {
     if (error?.response?.status === 422) Object.assign(errors, { ...errors, ...error.response.data.errors });
     else console.error(error);
@@ -217,7 +245,7 @@ const deleteTransaction = async () => {
     await loadTransactions(currentPage.value);
     await loadBudgetSnapshot();
     selectedTransaction.value = null;
-    showToastMessage('Transaction deleted successfully.', 'danger');
+    toast.show('Transaction deleted successfully.', 'danger');
   } catch (error) { console.error(error); } finally { isDeleting.value = false; }
 };
 
@@ -226,13 +254,25 @@ const nextPage = () => { if (currentPage.value < totalPages.value) goToPage(curr
 const prevPage = () => { if (currentPage.value > 1) goToPage(currentPage.value - 1); };
 
 onMounted(async () => {
+  if (typeof route.query.category === 'string' && route.query.category.trim()) {
+    categoryFilter.value = route.query.category.trim();
+  }
   await Promise.all([loadTransactions(), loadOptions(), loadBudgetSnapshot()]);
   if (!form.transaction_type_id) form.transaction_type_id = defaultTypeId();
 });
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer);
-});
+watch(
+  () => form.transaction_type_id,
+  () => {
+    if (
+      form.transaction_category_id
+      && !filteredCategoryOptionsForForm.value.some((option) => option.id === form.transaction_category_id)
+    ) {
+      form.transaction_category_id = null;
+    }
+  },
+);
+
 </script>
 
 <template>
@@ -309,7 +349,7 @@ onUnmounted(() => {
                     class="w-full rounded-lg border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500"
                     :disabled="isOptionsLoading">
                     <option :value="null">No category</option>
-                    <option v-for="option in categoryOptions" :key="option.id" :value="option.id">{{ option.name }}
+                    <option v-for="option in filteredCategoryOptionsForForm" :key="option.id" :value="option.id">{{ option.name }}
                     </option>
                   </select>
                   <p v-for="error in errors.transaction_category_id" :key="error" class="text-xs text-red-600">{{ error
@@ -424,7 +464,10 @@ onUnmounted(() => {
               <h2 class="text-xl font-semibold text-slate-900">Budget Snapshot</h2>
               <p class="mt-1 text-sm text-slate-500">Track this month's budget and alerts.</p>
             </div>
-            <span class="rounded-full px-3 py-1 text-xs font-medium ring-1" :class="budgetStatusClass">{{ budgetStatusText }}</span>
+            <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1" :class="budgetStatusClass">
+              <span class="h-2 w-2 rounded-full" :class="budgetStatusDotClass"></span>
+              {{ budgetStatusText }}
+            </span>
           </div>
 
           <div v-if="!isBudgetLoading" class="mt-5 space-y-5">
@@ -459,7 +502,7 @@ onUnmounted(() => {
                   :key="item.category_id"
                   :to="{ path: '/budgets', query: { month: currentMonth(), category_id: item.category_id } }"
                   class="block rounded-xl border px-3 py-2 hover:opacity-95"
-                  :class="item.alert_level === 'over' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'">
+                  :class="item.alert_level === 'over' ? 'border-red-200 bg-red-50 border-l-4 border-l-red-500' : 'border-amber-200 bg-amber-50 border-l-4 border-l-amber-500'">
                   <div class="flex items-center justify-between text-sm">
                     <span class="font-medium text-slate-900">{{ item.category }}</span>
                     <span :class="item.alert_level === 'over' ? 'text-red-700' : 'text-amber-700'">{{ Number(item.usage_pct).toFixed(1) }}%</span>
@@ -518,26 +561,5 @@ onUnmounted(() => {
       </Teleport>
     </div>
 
-    <Teleport to="body">
-      <transition name="toast-fade">
-        <div v-if="showToast" class="pointer-events-none fixed bottom-6 right-6 z-[130] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-xl" :class="toastClass">
-          {{ toastMessage }}
-        </div>
-      </transition>
-    </Teleport>
-
   </div>
 </template>
-
-<style scoped>
-.toast-fade-enter-active,
-.toast-fade-leave-active {
-  transition: all 0.2s ease;
-}
-
-.toast-fade-enter-from,
-.toast-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-</style>

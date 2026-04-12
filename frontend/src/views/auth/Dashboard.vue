@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import axiosInstance from '../../lib/axios';
 import { useUserStore } from '../../stores/userStore';
+import { formatCurrencyMYR, formatYmdDate } from '../../lib/formatters.js';
 
 interface DashboardOverview {
   total_balance: number;
@@ -114,22 +115,8 @@ const maxTrend = computed(() => {
   return Math.max(1, ...values);
 });
 
-const money = (value = 0) =>
-  new Intl.NumberFormat('en-MY', {
-    style: 'currency',
-    currency: 'MYR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
-const shortDate = (value = '') => {
-  if (!value || typeof value !== 'string') return '-';
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) return '-';
-  const parsed = new Date(year, month - 1, day);
-  if (Number.isNaN(parsed.getTime())) return '-';
-  return new Intl.DateTimeFormat('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }).format(parsed);
-};
+const money = (value = 0) => formatCurrencyMYR(value);
+const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
 
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 const currentMonth = () => {
@@ -157,7 +144,7 @@ const loadBudgetAlerts = async () => {
   isBudgetAlertLoading.value = true;
   try {
     const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth(), only_budgeted: 1 } });
-    budgetAlertSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0 };
+    budgetAlertSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
   } catch (error) {
     console.error(error);
   } finally {

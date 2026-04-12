@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axiosInstance from '../lib/axios';
+import { useToast } from '../composables/useToast.js';
+import { formatCurrencyMYR } from '../lib/formatters.js';
 
 interface BudgetItem {
   category_id: number;
@@ -27,12 +29,10 @@ const items = ref<BudgetItem[]>([]);
 const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const isLoading = ref(false);
 const isCopying = ref(false);
+const hasLoaded = ref(false);
 const savingCategoryIds = ref<number[]>([]);
 const deletingCategoryIds = ref<number[]>([]);
-const showToast = ref(false);
-const toastMessage = ref('');
-const toastTone = ref<'success' | 'danger'>('success');
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
+const toast = useToast();
 const route = useRoute();
 const router = useRouter();
 const storedThreshold = Number(localStorage.getItem('budget_default_threshold') || 80);
@@ -43,21 +43,7 @@ if (typeof route.query.month === 'string' && isValidMonth(route.query.month)) {
   month.value = route.query.month;
 }
 
-const formatMoney = (value = 0) =>
-  new Intl.NumberFormat('en-MY', {
-    style: 'currency',
-    currency: 'MYR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
-const showToastMessage = (message: string, tone: 'success' | 'danger' = 'success') => {
-  toastMessage.value = message;
-  toastTone.value = tone;
-  showToast.value = true;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { showToast.value = false; }, 2600);
-};
+const formatMoney = (value = 0) => formatCurrencyMYR(value);
 
 const isSaving = (categoryId: number) => savingCategoryIds.value.includes(categoryId);
 const isDeleting = (categoryId: number) => deletingCategoryIds.value.includes(categoryId);
@@ -78,8 +64,9 @@ const loadBudgets = async () => {
     summary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
   } catch (error) {
     console.error(error);
-    showToastMessage('Unable to load budgets right now.', 'danger');
+    toast.show('Unable to load budgets right now.', 'danger');
   } finally {
+    hasLoaded.value = true;
     isLoading.value = false;
   }
 };
@@ -89,7 +76,7 @@ const saveBudget = async (item: BudgetItem) => {
   try {
     const amount = Number(item.amount ?? 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      showToastMessage('Budget amount must be greater than 0.', 'danger');
+      toast.show('Budget amount must be greater than 0.', 'danger');
       return;
     }
     const threshold = Number(item.alert_threshold || 80);
@@ -100,10 +87,10 @@ const saveBudget = async (item: BudgetItem) => {
       alert_threshold: Math.min(Math.max(threshold, 1), 100),
     });
     await loadBudgets();
-    showToastMessage(`Budget saved for ${item.category}.`, 'success');
+    toast.show(`Budget saved for ${item.category}.`, 'success');
   } catch (error) {
     console.error(error);
-    showToastMessage(`Unable to save budget for ${item.category}.`, 'danger');
+    toast.show(`Unable to save budget for ${item.category}.`, 'danger');
   } finally {
     setBusy('save', item.category_id, false);
   }
@@ -115,10 +102,10 @@ const clearBudget = async (item: BudgetItem) => {
   try {
     await axiosInstance.delete(`/budgets/${item.budget_id}`);
     await loadBudgets();
-    showToastMessage(`Budget removed for ${item.category}.`, 'danger');
+    toast.show(`Budget removed for ${item.category}.`, 'danger');
   } catch (error) {
     console.error(error);
-    showToastMessage(`Unable to remove budget for ${item.category}.`, 'danger');
+    toast.show(`Unable to remove budget for ${item.category}.`, 'danger');
   } finally {
     setBusy('delete', item.category_id, false);
   }
@@ -137,10 +124,10 @@ const copyPreviousMonth = async () => {
     const { data } = await axiosInstance.post('/budgets/copy-previous-month', { month: month.value });
     await loadBudgets();
     const copiedCount = Number(data?.copied_count ?? 0);
-    showToastMessage(copiedCount > 0 ? `Copied ${copiedCount} budget(s) from previous month.` : 'No previous budgets to copy.', copiedCount > 0 ? 'success' : 'danger');
+    toast.show(copiedCount > 0 ? `Copied ${copiedCount} budget(s) from previous month.` : 'No previous budgets to copy.', copiedCount > 0 ? 'success' : 'danger');
   } catch (error) {
     console.error(error);
-    showToastMessage('Unable to copy previous month budgets.', 'danger');
+    toast.show('Unable to copy previous month budgets.', 'danger');
   } finally {
     isCopying.value = false;
   }
@@ -166,6 +153,8 @@ const persistDefaultThreshold = () => {
   localStorage.setItem('budget_default_threshold', String(safe));
   items.value = items.value.map((item) => (item.budget_id ? item : { ...item, alert_threshold: safe }));
 };
+const showFullScreenLoading = computed(() => isLoading.value && !hasLoaded.value);
+const showTableSkeleton = computed(() => isLoading.value && hasLoaded.value);
 
 onMounted(() => {
   loadBudgets();
@@ -189,9 +178,6 @@ watch(
   },
 );
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer);
-});
 </script>
 
 <template>
@@ -203,24 +189,28 @@ onUnmounted(() => {
             <h1 class="text-3xl font-semibold text-slate-900">Budget & Alerts</h1>
             <p class="mt-2 text-sm text-slate-500">Set monthly category budgets and get warning alerts before overspending.</p>
           </div>
-          <div class="flex items-center gap-3">
-            <button type="button" @click="shiftMonth(-1)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Prev
-            </button>
-            <input v-model="month" type="month" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
-            <button type="button" @click="shiftMonth(1)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Next
-            </button>
-            <div class="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3">
-              <span class="text-xs text-slate-500">Default Alert %</span>
-              <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-gray-300 px-2 py-1 text-sm" @change="persistDefaultThreshold" />
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="inline-flex items-center rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
+              <button type="button" @click="shiftMonth(-1)" class="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                Prev
+              </button>
+              <input v-model="month" type="month" class="mx-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              <button type="button" @click="shiftMonth(1)" class="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                Next
+              </button>
             </div>
-            <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
-              {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
-            </button>
-            <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
-              {{ isLoading ? 'Loading...' : 'Load' }}
-            </button>
+            <div class="inline-flex items-center rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
+              <div class="mx-1 flex h-10 items-center gap-2 rounded-md border border-gray-300 bg-white px-3">
+                <span class="text-xs text-slate-500">Default Alert %</span>
+                <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-gray-300 px-2 py-1 text-sm" @change="persistDefaultThreshold" />
+              </div>
+              <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying" class="rounded-md px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60">
+                {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
+              </button>
+              <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+                {{ isLoading ? 'Loading...' : 'Load' }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -266,9 +256,9 @@ onUnmounted(() => {
 
         <div v-if="!isLoading && items.length === 0" class="py-8 text-center text-slate-500">No categories yet. Create categories in Manage Options first.</div>
 
-        <div v-else-if="!isLoading" class="overflow-x-auto">
+        <div v-else class="max-h-[560px] overflow-auto">
           <table class="min-w-full border-collapse text-left">
-            <thead class="border-b border-slate-200">
+            <thead class="sticky top-0 z-10 border-b border-slate-200 bg-white">
               <tr class="text-sm text-slate-600">
                 <th class="px-4 py-3">Category</th>
                 <th class="px-4 py-3">Budget</th>
@@ -280,7 +270,16 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in items" :key="item.category_id" class="border-b border-slate-100 text-sm" :class="focusedCategoryId === item.category_id ? 'bg-blue-50' : ''">
+              <tr v-if="showTableSkeleton" v-for="n in 5" :key="`skeleton-${n}`" class="border-b border-slate-100 text-sm">
+                <td class="px-4 py-4"><div class="h-4 w-28 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-8 w-24 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-8 w-20 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-4 w-20 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-4 w-20 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-4 w-24 animate-pulse rounded bg-slate-100"></div></td>
+                <td class="px-4 py-4"><div class="h-8 w-40 animate-pulse rounded bg-slate-100"></div></td>
+              </tr>
+              <tr v-else v-for="item in items" :key="item.category_id" class="border-b border-slate-100 text-sm transition-colors hover:bg-slate-50" :class="focusedCategoryId === item.category_id ? 'bg-blue-50' : ''">
                 <td class="px-4 py-4 font-medium text-slate-900">{{ item.category }}</td>
                 <td class="px-4 py-4">
                   <input v-model.number="item.amount" type="number" min="0" step="0.01" placeholder="0.00" class="w-32 rounded-md border border-gray-300 px-2 py-1.5 focus:ring-2 focus:ring-blue-500" />
@@ -308,6 +307,9 @@ onUnmounted(() => {
                 </td>
                 <td class="px-4 py-4">
                   <div class="flex gap-2">
+                    <RouterLink :to="{ path: '/transactions', query: { category: item.category } }" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      View Txns
+                    </RouterLink>
                     <button type="button" @click="saveBudget(item)" :disabled="isSaving(item.category_id) || isDeleting(item.category_id)" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">
                       {{ isSaving(item.category_id) ? 'Saving...' : 'Save' }}
                     </button>
@@ -323,7 +325,7 @@ onUnmounted(() => {
       </section>
 
       <Teleport to="body">
-        <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+        <div v-if="showFullScreenLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
           <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
             <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
             <p class="text-lg font-semibold text-slate-900">Loading ...</p>
@@ -331,26 +333,6 @@ onUnmounted(() => {
         </div>
       </Teleport>
 
-      <Teleport to="body">
-        <transition name="toast-fade">
-          <div v-if="showToast" class="pointer-events-none fixed bottom-6 right-6 z-[130] rounded-lg px-4 py-3 text-sm font-medium text-white shadow-xl" :class="toastTone === 'danger' ? 'bg-red-700' : 'bg-emerald-600'">
-            {{ toastMessage }}
-          </div>
-        </transition>
-      </Teleport>
     </div>
   </div>
 </template>
-
-<style scoped>
-.toast-fade-enter-active,
-.toast-fade-leave-active {
-  transition: all 0.2s ease;
-}
-
-.toast-fade-enter-from,
-.toast-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-</style>
