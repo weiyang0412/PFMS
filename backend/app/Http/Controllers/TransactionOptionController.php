@@ -23,12 +23,12 @@ class TransactionOptionController extends Controller
     public function storeType(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|in:income,expense,1,3',
+            'name' => 'required|in:income,expense',
         ]);
 
-        $typeCode = TransactionType::typeCode($validated['name']);
+        $typeName = strtolower(trim($validated['name']));
         $type = $request->user()->transactionTypes()->firstOrCreate([
-            'name' => $typeCode,
+            'name' => $typeName,
         ]);
 
         return response()->json($type, 201);
@@ -119,8 +119,8 @@ class TransactionOptionController extends Controller
             return;
         }
 
-        foreach ([TransactionType::TYPE_INCOME, TransactionType::TYPE_EXPENSE] as $typeCode) {
-            $user->transactionTypes()->create(['name' => $typeCode]);
+        foreach (['income', 'expense'] as $typeName) {
+            $user->transactionTypes()->create(['name' => $typeName]);
         }
     }
 }

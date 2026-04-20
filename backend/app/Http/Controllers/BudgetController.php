@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Budget;
 use App\Models\TransactionCategory;
-use App\Models\TransactionType;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,7 +27,7 @@ class BudgetController extends Controller
             ->transactions()
             ->whereNotNull('transaction_category_id')
             ->whereBetween('transaction_date', [$monthStart, $monthEnd])
-            ->whereHas('transactionType', fn ($query) => $query->where('name', TransactionType::TYPE_EXPENSE))
+            ->whereHas('transactionType', fn ($query) => $query->whereRaw('LOWER(name) = ?', ['expense']))
             ->selectRaw('transaction_category_id, SUM(amount) as spent')
             ->groupBy('transaction_category_id')
             ->pluck('spent', 'transaction_category_id');

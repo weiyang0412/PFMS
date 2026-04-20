@@ -56,11 +56,21 @@ const sidebarItemClasses = computed(() => {
 });
 
 const sidebarLabelClasses = computed(() => {
-  return isSidebarOpen.value ? 'ms-3' : 'hidden';
+  return [
+    'block whitespace-nowrap overflow-hidden transition-all duration-200 ease-out',
+    isSidebarOpen.value
+      ? 'ms-3 opacity-100 translate-x-0 max-w-[160px] delay-150'
+      : 'ms-0 opacity-0 -translate-x-2 max-w-0 pointer-events-none delay-0',
+  ].join(' ');
 });
 
-const sidebarLogoTextClass = computed(() => {
-  return isSidebarOpen.value ? 'text-lg font-semibold text-slate-900 dark:text-white' : 'hidden';
+const sidebarLogoWrapClasses = computed(() => {
+  return [
+    'flex flex-col whitespace-nowrap overflow-hidden transition-all duration-200 ease-out',
+    isSidebarOpen.value
+      ? 'opacity-100 translate-x-0 max-w-[220px] delay-150'
+      : 'opacity-0 -translate-x-2 max-w-0 pointer-events-none delay-0',
+  ].join(' ');
 });
 
 const toggleDropdown = () => {
@@ -100,12 +110,12 @@ onBeforeUnmount(() => {
       ]"
     >
       <div class="border-b border-gray-200 dark:border-gray-700 pb-4" :class="isSidebarOpen ? 'px-6' : 'px-4'">
-        <div :class="['flex items-center gap-3', isSidebarOpen ? 'justify-between' : 'justify-center']">
-          <div class="flex items-center gap-3">
+        <div :class="['flex items-center', isSidebarOpen ? 'justify-between gap-3' : 'justify-center']">
+          <div :class="['flex items-center', isSidebarOpen ? 'gap-3' : 'gap-0']">
             <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm">
               <img :src="appLogo" class="h-10 w-10 object-contain" alt="Logo" />
             </div>
-            <div class="flex flex-col" :class="isSidebarOpen ? '' : 'hidden'">
+            <div :class="sidebarLogoWrapClasses">
               <span class="text-lg font-semibold text-slate-900 dark:text-white">SMARTBUDGET</span>
               <span class="text-sm text-gray-500 dark:text-gray-400">Hi, {{ userStore.user?.name ?? 'Guest' }}</span>
             </div>
@@ -238,7 +248,7 @@ onBeforeUnmount(() => {
       class="bg-slate-100 h-screen transition-all duration-300"
       :class="isSidebarOpen && shouldShowSidebar ? 'ml-64' : shouldShowSidebar ? 'ml-16' : 'ml-0'"
     >
-      <div class="mb-6">
+      <div>
           <RouterView />
         </div>
     </main>

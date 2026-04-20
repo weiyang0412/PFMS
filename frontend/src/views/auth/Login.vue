@@ -21,6 +21,7 @@ const errors = reactive({
 });
 
 const isLoading = ref(false);
+const showPassword = ref(false);
 const router = useRouter();
 
 const userStore = useUserStore();
@@ -51,7 +52,7 @@ const login = async (payload: LoginForm) => {
 
 
 <template>
-    <div class="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-gray-900">
+    <div class="fixed inset-0 flex items-center justify-center overflow-hidden bg-gray-900">
         <form @submit.prevent="login(form)" class="max-w-sm w-full p-4 bg-white rounded-lg shadow-md dark:bg-gray-800">
             <div class="mb-5">
                 <label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label>
@@ -67,9 +68,32 @@ const login = async (payload: LoginForm) => {
             <div class="mb-5">
                 <label for="password"
                     class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Password</label>
-                <input type="password" id="password" v-model="form.password"
-                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                    required />
+                <div class="relative">
+                    <input
+                        :type="showPassword ? 'text' : 'password'"
+                        id="password"
+                        v-model="form.password"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 pr-10 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                        required
+                    />
+                    <button
+                        type="button"
+                        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                        :title="showPassword ? 'Hide password' : 'Show password'"
+                        @click="showPassword = !showPassword"
+                    >
+                        <svg v-if="showPassword" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.585 10.587a2 2 0 002.828 2.828" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.68 16.673A9.717 9.717 0 0112 18c-5 0-9.27-3.11-11-7a11.052 11.052 0 012.818-3.964m3.147-2.148A9.723 9.723 0 0112 4c5 0 9.27 3.11 11 7a11.05 11.05 0 01-1.67 2.672" />
+                        </svg>
+                        <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" stroke-width="2" />
+                        </svg>
+                    </button>
+                </div>
                 <template v-if="errors.password?.length">
                     <span v-for="error in errors.password" :key="error" class="text-xs text-red-500 italic">
                         {{ error }}

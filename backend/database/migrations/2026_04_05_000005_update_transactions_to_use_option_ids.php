@@ -25,16 +25,16 @@ return new class extends Migration
         $transactions = DB::table('transactions')->get();
 
         foreach ($transactions as $transaction) {
-            $typeCode = $this->typeCode($transaction->type);
+            $typeName = strtolower(trim((string) $transaction->type));
             $typeId = DB::table('transaction_types')->where([
                 'user_id' => $transaction->user_id,
-                'name' => $typeCode,
+                'name' => $typeName,
             ])->value('id');
 
             if (!$typeId) {
                 $typeId = DB::table('transaction_types')->insertGetId([
                     'user_id' => $transaction->user_id,
-                    'name' => $typeCode,
+                    'name' => $typeName,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -87,7 +87,7 @@ return new class extends Migration
             DB::table('transactions')
                 ->where('id', $transaction->id)
                 ->update([
-                    'type' => $this->typeName($typeName),
+                    'type' => $typeName,
                     'category' => $categoryName,
                 ]);
         }
@@ -98,29 +98,5 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE transactions MODIFY type VARCHAR(100) NOT NULL");
-    }
-
-    private function typeCode($value): int
-    {
-        $normalized = strtolower(trim((string) $value));
-        if ($normalized === 'income' || $normalized === '3') {
-            return 3;
-        }
-        if ($normalized === 'expense' || $normalized === '1') {
-            return 1;
-        }
-        return 0;
-    }
-
-    private function typeName($value): string
-    {
-        $normalized = trim((string) $value);
-        if ($normalized === '3') {
-            return 'income';
-        }
-        if ($normalized === '1') {
-            return 'expense';
-        }
-        return 'other';
     }
 };

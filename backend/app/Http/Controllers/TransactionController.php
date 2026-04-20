@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use App\Models\TransactionCategory;
-use App\Models\TransactionType;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -92,11 +91,10 @@ class TransactionController extends Controller
         ]);
 
         if (!empty($validated['transaction_category_id'])) {
-            $transactionTypeCode = TransactionType::typeCode($request->user()
+            $transactionTypeName = strtolower((string) $request->user()
                 ->transactionTypes()
                 ->whereKey($validated['transaction_type_id'])
                 ->value('name'));
-            $transactionTypeName = TransactionType::typeName($transactionTypeCode);
 
             if (in_array($transactionTypeName, ['income', 'expense'], true)) {
                 $appliesToRaw = $request->user()
@@ -122,8 +120,8 @@ class TransactionController extends Controller
             return;
         }
 
-        foreach ([TransactionType::TYPE_INCOME, TransactionType::TYPE_EXPENSE] as $typeCode) {
-            $request->user()->transactionTypes()->create(['name' => $typeCode]);
+        foreach (['income', 'expense'] as $typeName) {
+            $request->user()->transactionTypes()->create(['name' => $typeName]);
         }
     }
 }

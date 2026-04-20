@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('transaction_types', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->unsignedTinyInteger('name')->default(0);
+            $table->string('name', 100);
             $table->timestamps();
 
             $table->unique(['user_id', 'name']);
