@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use App\Models\TransactionCategory;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -14,6 +15,13 @@ class TransactionController extends Controller
     {
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
+        $month = $request->query('month');
+
+        if ($month !== null && !preg_match('/^\d{4}-\d{2}$/', (string) $month)) {
+            return response()->json([
+                'message' => 'Invalid month format. Use YYYY-MM.',
+            ], 422);
+        }
 
         $query = $request->user()
             ->transactions()
@@ -21,6 +29,12 @@ class TransactionController extends Controller
             ->orderByDesc('transaction_date')
             ->orderByDesc('created_at')
             ->orderByDesc('id');
+
+        if ($month) {
+            $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
+            $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
+            $query->whereBetween('transaction_date', [$monthStart, $monthEnd]);
+        }
 
         $transactions = $query->paginate($perPage, ['*'], 'page', $page);
         $transactions->through(function ($transaction) {

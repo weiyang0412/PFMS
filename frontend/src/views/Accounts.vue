@@ -149,18 +149,19 @@ onMounted(() => {
 <template>
   <div class="h-full w-full bg-slate-100 p-6">
     <div class="space-y-6">
-      <section class="rounded-lg bg-white p-6 shadow">
+      <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 class="text-3xl font-semibold text-slate-900">Accounts</h1>
-            <p class="mt-2 text-sm text-slate-500">
+            <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Accounts</p>
+            <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Manage your balances</h1>
+            <p class="mt-2 text-sm text-slate-300">
               Set how much money you currently have in each account.
             </p>
           </div>
           <button
             type="button"
             @click="openAddModal"
-            class="rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800"
+            class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20"
           >
             Add Account
           </button>
@@ -168,7 +169,7 @@ onMounted(() => {
       </section>
 
       <section class="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div class="rounded-lg bg-white p-6 shadow">
+        <div class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
           <p class="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">Total Balance</p>
           <p class="mt-3 text-4xl font-semibold text-slate-900">{{ formatCurrency(totalBalance) }}</p>
           <p class="mt-2 text-sm text-slate-500">
@@ -176,7 +177,7 @@ onMounted(() => {
           </p>
         </div>
 
-        <div class="rounded-lg bg-slate-900 p-6 text-white shadow">
+        <div class="rounded-[28px] bg-slate-900 p-6 text-white shadow-sm">
           <p class="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">Accounts Summary</p>
           <div class="mt-4 space-y-3">
             <div class="rounded-2xl bg-white/5 p-4">
@@ -193,7 +194,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="rounded-lg bg-white p-6 shadow">
+      <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
         <div class="mb-4">
           <h2 class="text-xl font-semibold text-slate-900">Your Accounts</h2>
           <p class="text-sm text-slate-500">Manage account names and current balances here.</p>
@@ -225,14 +226,14 @@ onMounted(() => {
                     <button
                       type="button"
                       @click="openEditModal(account)"
-                      class="rounded-md border border-blue-700 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                      class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       @click="openConfirmDelete(account)"
-                      class="rounded-md border border-red-700 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                      class="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
                     >
                       Delete
                     </button>
@@ -367,3 +368,4 @@ onMounted(() => {
     </div>
   </div>
 </template>
+

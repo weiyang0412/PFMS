@@ -138,27 +138,28 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
 <template>
   <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
     <div class="h-full w-full space-y-6">
-      <section class="rounded-lg bg-white p-6 shadow">
-        <h1 class="text-3xl font-semibold text-slate-900">Manage Transaction Options</h1>
-        <p class="mt-2 text-sm text-slate-500">Create the type and category lists that appear in your add transaction form.</p>
+      <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
+        <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Manage Options</p>
+        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Configure transaction dictionaries</h1>
+        <p class="mt-2 text-sm text-slate-300">Create the type and category lists that appear in your add transaction form.</p>
       </section>
 
       <div class="grid gap-6 lg:grid-cols-2">
-        <section class="rounded-lg bg-white p-6 shadow">
+        <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
           <h2 class="text-xl font-semibold text-slate-900">Types</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Income, Expense, Transfer.</p>
           <div class="mt-4 flex gap-2">
             <input
               v-model="newTypeName"
               type="text"
-              class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
               placeholder="Add a new type"
             />
             <button
               type="button"
               @click="createType"
               :disabled="isTypeSubmitting"
-              class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
               Add
             </button>
@@ -168,7 +169,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
             <div
               v-for="option in typeOptions"
               :key="option.id"
-              class="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+              class="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
             >
               <span>{{ option.name }}</span>
               <button
@@ -184,19 +185,19 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
           <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No types yet. Add one above.</p>
         </section>
 
-        <section class="rounded-lg bg-white p-6 shadow">
+        <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
           <h2 class="text-xl font-semibold text-slate-900">Categories</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Food, Transport, Salary.</p>
           <div class="mt-4 flex flex-col gap-2 sm:flex-row">
             <input
               v-model="newCategoryName"
               type="text"
-              class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
               placeholder="Add a new category"
             />
             <select
               v-model="newCategoryAppliesTo"
-              class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              class="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
             >
               <option value="both">Both</option>
               <option value="expense">Expense only</option>
@@ -206,7 +207,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
               type="button"
               @click="createCategory"
               :disabled="isCategorySubmitting"
-              class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
               Add
             </button>
@@ -216,7 +217,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
             <div
               v-for="option in categoryOptions"
               :key="option.id"
-              class="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+              class="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
             >
               <span>{{ option.name }}</span>
               <span
@@ -255,3 +256,4 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
     </div>
   </div>
 </template>
+

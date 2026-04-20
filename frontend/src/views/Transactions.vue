@@ -54,6 +54,7 @@ const budgetItems = ref<BudgetItem[]>([]);
 const typeFilter = ref('all');
 const categoryFilter = ref('all');
 const descriptionSearch = ref('');
+const monthFilter = ref(new Date().toISOString().slice(0, 7));
 const toast = useToast();
 const route = useRoute();
 
@@ -169,7 +170,15 @@ const topBudgetAlerts = computed(() =>
 const loadTransactions = async (page = 1) => {
   isLoading.value = true;
   try {
-    const { data } = await axiosInstance.get('/transactions', { params: { page, per_page: perPage.value } });
+    const params: Record<string, string | number> = {
+      page,
+      per_page: perPage.value,
+    };
+    if (monthFilter.value) {
+      params.month = monthFilter.value;
+    }
+
+    const { data } = await axiosInstance.get('/transactions', { params });
     transactions.value = data.data;
     totalPages.value = data.last_page;
     totalTransactions.value = data.total;
@@ -252,8 +261,14 @@ const deleteTransaction = async () => {
 const goToPage = (page: number) => { if (page >= 1 && page <= totalPages.value) loadTransactions(page); };
 const nextPage = () => { if (currentPage.value < totalPages.value) goToPage(currentPage.value + 1); };
 const prevPage = () => { if (currentPage.value > 1) goToPage(currentPage.value - 1); };
+const handleMonthFilterChange = () => {
+  loadTransactions(1);
+};
 
 onMounted(async () => {
+  if (typeof route.query.month === 'string' && /^\d{4}-\d{2}$/.test(route.query.month)) {
+    monthFilter.value = route.query.month;
+  }
   if (typeof route.query.category === 'string' && route.query.category.trim()) {
     categoryFilter.value = route.query.category.trim();
   }
@@ -278,14 +293,15 @@ watch(
 <template>
   <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
     <div class="h-full w-full space-y-6">
-      <section class="w-full rounded-lg bg-white p-6 shadow">
+      <section class="w-full rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 class="text-3xl font-semibold text-slate-900">Transactions</h1>
-            <p class="text-sm text-slate-500">Track your income and expenses on a full page.</p>
+            <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Transactions</p>
+            <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Track every money movement</h1>
+            <p class="mt-2 text-sm text-slate-300">Track your income and expenses on a full page.</p>
           </div>
           <button type="button" @click="openAddModal"
-            class="rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800">Add
+            class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20">Add
             Transaction</button>
         </div>
       </section>
@@ -378,7 +394,7 @@ watch(
                   @click="closeModal"
                   class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button><button
                   type="submit" :disabled="isSubmitting || isOptionsLoading || typeOptions.length === 0"
-                  class="rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{{
+                  class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">{{
                     mode === 'edit' ? 'Save Changes' : 'Save Transaction' }}</button></div>
             </form>
           </div>
@@ -386,21 +402,22 @@ watch(
       </Teleport>
 
       <div class="grid gap-6 lg:grid-cols-3">
-        <section class="overflow-hidden rounded-lg bg-white p-6 shadow lg:col-span-2">
+        <section class="overflow-hidden rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:col-span-2">
           <div class="mb-4">
             <h2 class="text-xl font-semibold text-slate-900">Recent Transactions</h2>
             <p class="text-sm text-slate-500">Track your latest finance records.</p>
-            <div class="mt-4 grid gap-3 md:grid-cols-3">
-              <select v-model="typeFilter" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500">
+            <div class="mt-4 grid gap-3 md:grid-cols-4">
+              <select v-model="typeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
                 <option value="all">All Types</option>
                 <option v-for="option in typeOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
               </select>
-              <select v-model="categoryFilter" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500">
+              <select v-model="categoryFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
                 <option value="all">All Categories</option>
                 <option value="__none__">No category</option>
                 <option v-for="option in categoryOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
               </select>
-              <input v-model.trim="descriptionSearch" type="text" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="Search description..." />
+              <input v-model="monthFilter" type="month" @change="handleMonthFilterChange" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10" />
+              <input v-model.trim="descriptionSearch" type="text" class="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10" placeholder="Search description..." />
             </div>
           </div>
           <div v-if="!isLoading" class="flex h-full flex-col">
@@ -458,7 +475,7 @@ watch(
           </div>
         </section>
 
-        <section class="rounded-lg bg-white p-6 shadow lg:col-span-1">
+        <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:col-span-1">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-xl font-semibold text-slate-900">Budget Snapshot</h2>
@@ -563,3 +580,4 @@ watch(
 
   </div>
 </template>
+
