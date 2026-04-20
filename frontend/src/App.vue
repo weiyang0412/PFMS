@@ -50,14 +50,14 @@ const shouldShowSidebar = computed(() => {
 
 const sidebarItemClasses = computed(() => {
   return [
-    'flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group',
+    'group flex items-center rounded-xl border border-transparent px-3 py-2.5 text-slate-300 transition-all duration-200 hover:border-white/10 hover:bg-white/10 hover:text-white [&.router-link-active]:border-cyan-300/30 [&.router-link-active]:bg-cyan-400/15 [&.router-link-active]:text-white [&.router-link-active]:shadow-[0_8px_24px_-10px_rgba(34,211,238,0.75)]',
     isSidebarOpen.value ? 'justify-start' : 'justify-center',
   ].join(' ');
 });
 
 const sidebarLabelClasses = computed(() => {
   return [
-    'block whitespace-nowrap overflow-hidden transition-all duration-200 ease-out',
+    'block whitespace-nowrap overflow-hidden text-sm font-medium tracking-wide transition-all duration-200 ease-out',
     isSidebarOpen.value
       ? 'ms-3 opacity-100 translate-x-0 max-w-[160px] delay-150'
       : 'ms-0 opacity-0 -translate-x-2 max-w-0 pointer-events-none delay-0',
@@ -70,6 +70,18 @@ const sidebarLogoWrapClasses = computed(() => {
     isSidebarOpen.value
       ? 'opacity-100 translate-x-0 max-w-[220px] delay-150'
       : 'opacity-0 -translate-x-2 max-w-0 pointer-events-none delay-0',
+  ].join(' ');
+});
+
+const sidebarIconClasses = 'h-5 w-5 shrink-0 text-slate-400 transition-colors duration-200 group-hover:text-white';
+
+const sidebarActionClasses = computed(() => {
+  return [
+    'group flex items-center rounded-xl border border-transparent px-3 py-2.5 text-slate-300 transition-all duration-200',
+    logoutLoading.value
+      ? 'cursor-not-allowed opacity-60'
+      : 'cursor-pointer hover:border-white/10 hover:bg-white/10 hover:text-white',
+    isSidebarOpen.value ? 'justify-start' : 'justify-center',
   ].join(' ');
 });
 
@@ -105,29 +117,29 @@ onBeforeUnmount(() => {
     <aside
       v-if="shouldShowSidebar"
       :class="[
-        'fixed top-0 left-0 z-40 h-screen pt-4 transition-all duration-300 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col',
+        'fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-white/10 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 pt-4 text-slate-200 shadow-[12px_0_32px_-18px_rgba(2,6,23,0.95)] transition-all duration-300',
         isSidebarOpen ? 'w-64' : 'w-16',
       ]"
     >
-      <div class="border-b border-gray-200 dark:border-gray-700 pb-4" :class="isSidebarOpen ? 'px-6' : 'px-4'">
+      <div class="pb-4 border-b border-white/10" :class="isSidebarOpen ? 'px-5' : 'px-2'">
         <div :class="['flex items-center', isSidebarOpen ? 'justify-between gap-3' : 'justify-center']">
           <div :class="['flex items-center', isSidebarOpen ? 'gap-3' : 'gap-0']">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/95 p-1.5 shadow-lg shadow-slate-950/60 ring-1 ring-white/30">
               <img :src="appLogo" class="h-10 w-10 object-contain" alt="Logo" />
             </div>
             <div :class="sidebarLogoWrapClasses">
-              <span class="text-lg font-semibold text-slate-900 dark:text-white">SMARTBUDGET</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400">Hi, {{ userStore.user?.name ?? 'Guest' }}</span>
+              <span class="text-lg font-semibold tracking-tight text-white">SMARTBUDGET</span>
+              <span class="text-xs text-slate-400">Hi, {{ userStore.user?.name ?? 'Guest' }}</span>
             </div>
           </div>
         </div>
       </div>
-      <div class="px-3 pb-4 mt-4 flex-1 overflow-y-auto">
+      <div class="mt-4 flex-1 overflow-y-auto px-3 pb-4">
         <ul v-if="userStore.user" class="space-y-2 font-medium">
           <!-- Dashboard -->
           <li>
             <RouterLink to="/dashboard" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="currentColor" viewBox="0 0 22 21">
+              <svg :class="sidebarIconClasses" fill="currentColor" viewBox="0 0 22 21">
                 <path stroke="currentColor" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5Zm16 14a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2ZM4 13a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6Zm16-2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6Z"/>
               </svg>
               <span :class="sidebarLabelClasses">Dashboard</span>
@@ -136,7 +148,7 @@ onBeforeUnmount(() => {
           <!-- Accounts -->
           <li>
             <RouterLink to="/accounts" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="currentColor" viewBox="0 0 22 21">
+              <svg :class="sidebarIconClasses" fill="currentColor" viewBox="0 0 22 21">
                 <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M3 21h18M4 18h16M6 10v8m4-8v8m4-8v8m4-8v8M4 9.5v-.955a1 1 0 0 1 .458-.84l7-4.52a1 1 0 0 1 1.084 0l7 4.52a1 1 0 0 1 .458.84V9.5a.5.5 0 0 1-.5.5h-15a.5.5 0 0 1-.5-.5Z"/>
               </svg>
               <span :class="sidebarLabelClasses">Accounts</span>
@@ -145,7 +157,7 @@ onBeforeUnmount(() => {
           <!-- Transactions -->
           <li>
             <RouterLink to="/transactions" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="currentColor" viewBox="0 0 22 21">
+              <svg :class="sidebarIconClasses" fill="currentColor" viewBox="0 0 22 21">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16h13M4 16l4-4m-4 4 4 4M20 8H7m13 0-4 4m4-4-4-4"/>
               </svg>
               <span :class="sidebarLabelClasses">Transactions</span>
@@ -153,7 +165,7 @@ onBeforeUnmount(() => {
           </li>
           <li>
             <RouterLink to="/transaction-options" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H21M3 6h3m4 12h11M3 18h3m8-6h7M3 12h7m-1-8v4m8 8v4"/>
               </svg>
               <span :class="sidebarLabelClasses">Manage Options</span>
@@ -161,7 +173,7 @@ onBeforeUnmount(() => {
           </li>
           <li>
             <RouterLink to="/budgets" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8M8 12h5M6 3h12a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" />
               </svg>
               <span :class="sidebarLabelClasses">Budget & Alerts</span>
@@ -170,7 +182,7 @@ onBeforeUnmount(() => {
           <!-- Financial Analytics -->
           <li>
             <RouterLink to="/dashboard" :class="sidebarItemClasses">
-              <svg class="w-6 h-6 text-gray-500 transition duration-75 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white" fill="currentColor" viewBox="0 0 22 21">
+              <svg :class="sidebarIconClasses" fill="currentColor" viewBox="0 0 22 21">
                 <path d="M16.975 11H10V4.025a1 1 0 0 0-1.066-.998 8.5 8.5 0 1 0 9.039 9.039.999.999 0 0 0-1-1.066h.002Z"/>
                 <path d="M12.5 0c-.157 0-.311.01-.565.027A1 1 0 0 0 11 1.02V10h8.975a1 1 0 0 0 1-.935c.013-.188.028-.374.028-.565A8.51 8.51 0 0 0 12.5 0Z"/>
               </svg>
@@ -187,9 +199,9 @@ onBeforeUnmount(() => {
           <li v-if="userStore.user">
             <div
               @click="logoutLoading ? null : logout()"
-              :class="['flex items-center p-2 rounded-lg text-gray-900 dark:text-white group', logoutLoading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700', isSidebarOpen ? '' : 'justify-center']"
+              :class="sidebarActionClasses"
             >
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white"
+              <svg :class="sidebarIconClasses"
                   fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M20 12H8m12 0-4 4m4-4-4-4M9 4H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h2"/>
@@ -203,7 +215,7 @@ onBeforeUnmount(() => {
               to="/login"
               :class="sidebarItemClasses"
             >
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h12m0 0-4-4m4 4-4 4M15 4h2a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-2"/>
               </svg>
               <span :class="sidebarLabelClasses">Sign In</span>
@@ -215,19 +227,19 @@ onBeforeUnmount(() => {
               to="/register"
               :class="sidebarItemClasses"
             >
-              <svg class="w-6 h-6 text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white" fill="none" viewBox="0 0 24 24">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 14a7 7 0 0 0-7 7h14a7 7 0 0 0-7-7Zm8-3v6m3-3h-6"/>
               </svg>
               <span :class="sidebarLabelClasses">Sign Up</span>
             </RouterLink>
           </li>
         </ul>
-        <div class="border-t border-gray-200 dark:border-gray-700 my-4"></div>
+        <div class="my-4 border-t border-white/10"></div>
         <div class="mt-4 flex justify-end pr-2">
           <button
             type="button"
             @click="toggleSidebar"
-            class="inline-flex h-10 w-10 items-center justify-center text-gray-600 hover:text-gray-900 focus:outline-none dark:text-gray-200 dark:hover:text-white"
+            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
             aria-label="Toggle sidebar"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
