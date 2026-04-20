@@ -7,6 +7,8 @@ import Accounts from '../views/Accounts.vue'
 import Transactions from '../views/Transactions.vue'
 import TransactionOptions from '../views/TransactionOptions.vue'
 import Budgets from '../views/Budgets.vue'
+import FinancialTrend from '../views/FinancialTrend.vue'
+import FinancialSummary from '../views/FinancialSummary.vue'
 import { useUserStore } from '../stores/userStore'
 
 const router = createRouter({
@@ -58,6 +60,18 @@ const router = createRouter({
             path: "/budgets",
             name: "budgets",
             component: Budgets,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/financial-trend",
+            name: "financial-trend",
+            component: FinancialTrend,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/financial-summary",
+            name: "financial-summary",
+            component: FinancialSummary,
             meta: { requiresAuth: true },
         },
     ],

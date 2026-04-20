@@ -546,14 +546,18 @@ watch(
       </div>
 
       <Teleport to="body">
-        <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
-          <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
-            <span
-              class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
-            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
-            <!-- <p class="mt-1 text-sm text-slate-500">Fetching your latest transaction records.</p> -->
+        <Transition name="loading-fade">
+          <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+            <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+              <div class="relative mb-4 h-12 w-12">
+                <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
+                <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
+              </div>
+              <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+              <!-- <p class="mt-1 text-sm text-slate-500">Fetching your latest transaction records.</p> -->
+            </div>
           </div>
-        </div>
+        </Transition>
       </Teleport>
 
       <Teleport to="body">
@@ -580,4 +584,7 @@ watch(
 
   </div>
 </template>
+
+
+
 

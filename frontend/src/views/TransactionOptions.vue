@@ -140,7 +140,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
     <div class="h-full w-full space-y-6">
       <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Manage Options</p>
-        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Configure transaction dictionaries</h1>
+        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Manage Transaction Types & Categories</h1>
         <p class="mt-2 text-sm text-slate-300">Create the type and category lists that appear in your add transaction form.</p>
       </section>
 
@@ -241,19 +241,27 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
       </div>
 
       <Teleport to="body">
-        <div
-          v-if="isLoading"
-          class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4"
-        >
-          <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
-            <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
-            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
-            <!-- <p class="mt-1 text-sm text-slate-500">Fetching your data.</p> -->
+        <Transition name="loading-fade">
+          <div
+            v-if="isLoading"
+            class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4"
+          >
+            <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+              <div class="relative mb-4 h-12 w-12">
+                <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
+                <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
+              </div>
+              <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+              <!-- <p class="mt-1 text-sm text-slate-500">Fetching your data.</p> -->
+            </div>
           </div>
-        </div>
+        </Transition>
       </Teleport>
 
     </div>
   </div>
 </template>
+
+
+
 

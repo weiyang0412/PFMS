@@ -110,10 +110,9 @@ const categories = computed<DashboardCategoryItem[]>(() => summary.value?.catego
 const recent = computed<DashboardRecentItem[]>(() => summary.value?.recent_transactions ?? []);
 const insights = computed<DashboardInsights>(() => summary.value?.insights ?? defaultInsights);
 const period = computed<DashboardPeriod>(() => summary.value?.period ?? defaultPeriod);
-const maxTrend = computed(() => {
-  const values = trend.value.flatMap((item) => [Number(item.income) || 0, Number(item.expense) || 0]);
-  return Math.max(1, ...values);
-});
+const trendPreview = computed<DashboardTrendItem[]>(() => trend.value.slice(-3));
+const topCategoriesPreview = computed<DashboardCategoryItem[]>(() => categories.value.slice(0, 3));
+const recentPreview = computed<DashboardRecentItem[]>(() => recent.value.slice(0, 5));
 
 const money = (value = 0) => formatCurrencyMYR(value);
 const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
@@ -220,120 +219,56 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+      <section class="grid gap-6 xl:grid-cols-2">
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <div class="flex items-center justify-between">
+          <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Trend</p>
-              <h2 class="mt-1 text-2xl font-semibold text-slate-900">Income vs expense</h2>
+              <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Trend Preview</p>
+              <h2 class="mt-1 text-2xl font-semibold text-slate-900">Quick trend snapshot</h2>
             </div>
-          </div>
-          <div v-if="trend.length" class="mt-6 grid grid-cols-6 items-end gap-3 rounded-[24px] bg-slate-50 p-5">
-            <div v-for="item in trend" :key="item.month" class="flex flex-col items-center gap-3">
-              <div class="flex h-56 items-end gap-2">
-                <div class="w-4 rounded-t-full bg-sky-500"
-                  :style="{ height: `${Math.max((item.income / maxTrend) * 180, item.income > 0 ? 12 : 0)}px` }"></div>
-                <div class="w-4 rounded-t-full bg-amber-500"
-                  :style="{ height: `${Math.max((item.expense / maxTrend) * 180, item.expense > 0 ? 12 : 0)}px` }">
-                </div>
-              </div>
-              <div class="text-center">
-                <p class="text-sm font-medium text-slate-700">{{ item.month }}</p>
-                <p class="text-xs text-slate-500">{{ money(item.net) }}</p>
-              </div>
-            </div>
-          </div>
-          <div v-else class="mt-6 rounded-[24px] bg-slate-50 p-6 text-sm text-slate-500">
-            <p>Add some transactions to see the trend chart.</p>
-            <RouterLink to="/transactions" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-              Go to Transactions
+            <RouterLink to="/financial-trend" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+              View Trend
             </RouterLink>
           </div>
-        </article>
-
-        <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Accounts</p>
-          <h2 class="mt-1 text-2xl font-semibold text-slate-900">Balance by account</h2>
-          <div v-if="accounts.length" class="mt-6 space-y-4">
-            <div v-for="account in accounts" :key="account.id" class="rounded-2xl bg-slate-50 p-4">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-medium text-slate-900">{{ account.name }}</p>
-                <span class="text-sm font-semibold text-slate-700">{{ money(account.balance) }}</span>
-              </div>
-              <div class="mt-3 h-2 rounded-full bg-slate-200">
-                <div class="h-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
-                  :style="{ width: `${Math.max((account.balance / Math.max(Number(overview.total_balance || 0), 1)) * 100, 8)}%` }">
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-            <p>No accounts yet. Add one to track your real balance.</p>
-            <RouterLink to="/accounts" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-              Go to Accounts
-            </RouterLink>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1fr_1fr_1.1fr]">
-        <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Spending</p>
-          <h2 class="mt-1 text-xl font-semibold text-slate-900">Expense by category</h2>
-          <div v-if="categories.length" class="mt-6 space-y-5">
-            <div v-for="item in categories" :key="item.category">
+          <div v-if="trendPreview.length" class="mt-5 space-y-3">
+            <div v-for="item in trendPreview" :key="item.month" class="rounded-2xl bg-slate-50 px-4 py-3">
               <div class="flex items-center justify-between text-sm">
-                <span class="font-medium text-slate-700">{{ item.category }}</span>
-                <span class="text-slate-500">{{ money(item.amount) }} · {{ Number(item.percentage).toFixed(1) }}%</span>
+                <span class="font-medium text-slate-900">{{ item.month }}</span>
+                <span class="text-slate-600">Net {{ money(item.net) }}</span>
               </div>
-              <div class="mt-2 h-2.5 rounded-full bg-slate-100">
-                <div class="h-2.5 rounded-full bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-500"
-                  :style="{ width: `${Math.max(Number(item.percentage), 6)}%` }"></div>
+              <div class="mt-2 flex items-center justify-between text-xs">
+                <span class="text-emerald-700">Income {{ money(item.income) }}</span>
+                <span class="text-rose-700">Expense {{ money(item.expense) }}</span>
               </div>
             </div>
           </div>
-          <div v-else class="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-            <p>No expense categories yet for this month.</p>
-            <RouterLink to="/transactions" class="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-              Add Transactions
-            </RouterLink>
-          </div>
+          <p v-else class="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">No trend data yet.</p>
         </article>
 
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Snapshot</p>
-          <h2 class="mt-1 text-xl font-semibold text-slate-900">This month</h2>
-          <div class="mt-6 space-y-4">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Summary Preview</p>
+              <h2 class="mt-1 text-2xl font-semibold text-slate-900">Quick financial summary</h2>
+            </div>
+            <RouterLink to="/financial-summary" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+              View Summary
+            </RouterLink>
+          </div>
+          <div class="mt-5 grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 p-4">
-              <p class="text-sm text-slate-500">Income change</p>
-              <p class="mt-2 text-lg font-semibold text-slate-900">{{ change(overview.income_change_pct) }}</p>
+              <p class="text-sm text-slate-500">Transactions this month</p>
+              <p class="mt-2 text-xl font-semibold text-slate-900">{{ insights.transactions_this_month ?? 0 }}</p>
             </div>
             <div class="rounded-2xl border border-slate-200 p-4">
-              <p class="text-sm text-slate-500">Expense change</p>
-              <p class="mt-2 text-lg font-semibold text-slate-900">{{ change(overview.expense_change_pct) }}</p>
-            </div>
-            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p class="text-sm text-emerald-700">Transactions this month</p>
-              <p class="mt-2 text-lg font-semibold text-emerald-900">{{ insights.transactions_this_month ?? 0 }}</p>
+              <p class="text-sm text-slate-500">Largest expense</p>
+              <p class="mt-2 text-xl font-semibold text-slate-900">{{ money(insights.largest_expense_amount) }}</p>
             </div>
           </div>
-        </article>
-
-        <article class="rounded-[28px] bg-slate-900 p-6 text-white shadow-sm">
-          <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Insights</p>
-          <h2 class="mt-1 text-xl font-semibold">Financial health summary</h2>
-          <div class="mt-6 space-y-4">
-            <div class="rounded-2xl bg-white/5 p-4">
-              <p class="text-sm text-slate-300">Largest expense category</p>
-              <p class="mt-2 text-lg font-semibold">{{ insights.largest_expense_category ?? 'No expense data yet' }}</p>
-            </div>
-            <div class="rounded-2xl bg-white/5 p-4">
-              <p class="text-sm text-slate-300">Largest category amount</p>
-              <p class="mt-2 text-lg font-semibold">{{ money(insights.largest_expense_amount) }}</p>
-            </div>
-            <div class="rounded-2xl bg-white/5 p-4">
-              <p class="text-sm text-slate-300">Average expense</p>
-              <p class="mt-2 text-lg font-semibold">{{ money(insights.average_expense) }}</p>
+          <div v-if="topCategoriesPreview.length" class="mt-4 space-y-2">
+            <div v-for="item in topCategoriesPreview" :key="item.category" class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+              <span class="font-medium text-slate-700">{{ item.category }}</span>
+              <span class="text-slate-500">{{ Number(item.percentage).toFixed(1) }}%</span>
             </div>
           </div>
         </article>
@@ -345,10 +280,10 @@ onMounted(() => {
             <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Activity</p>
             <h2 class="mt-1 text-2xl font-semibold text-slate-900">Recent transactions</h2>
           </div>
-          <span class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">{{ recent.length }}
+          <span class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">{{ recentPreview.length }}
             latest entries</span>
         </div>
-        <div v-if="recent.length" class="mt-6 overflow-x-auto">
+        <div v-if="recentPreview.length" class="mt-6 overflow-x-auto">
           <table class="min-w-full divide-y divide-slate-200">
             <thead>
               <tr class="text-left text-sm text-slate-500">
@@ -359,7 +294,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="item in recent" :key="item.id">
+              <tr v-for="item in recentPreview" :key="item.id">
                 <td class="py-4 font-medium text-slate-900">{{ item.description }}</td>
                 <td class="py-4 text-slate-500">{{ item.category }}</td>
                 <td class="py-4 text-slate-500">{{ shortDate(item.transaction_date) }}</td>
@@ -381,13 +316,21 @@ onMounted(() => {
     </div>
 
     <Teleport to="body">
-      <div v-if="isInitialLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
-        <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
-          <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
-          <p class="text-lg font-semibold text-slate-900">Loading ...</p>
-          <!-- <p class="mt-1 text-sm text-slate-500">Fetching your latest account and transaction data.</p> -->
+      <Transition name="loading-fade">
+        <div v-if="isInitialLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+          <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+            <div class="relative mb-4 h-12 w-12">
+              <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
+              <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
+            </div>
+            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+            <!-- <p class="mt-1 text-sm text-slate-500">Fetching your latest account and transaction data.</p> -->
+          </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
+
+
+

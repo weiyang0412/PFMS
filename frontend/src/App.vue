@@ -179,16 +179,23 @@ onBeforeUnmount(() => {
               <span :class="sidebarLabelClasses">Budget & Alerts</span>
             </RouterLink>
           </li>
-          <!-- Financial Analytics -->
-          <!-- <li>
-            <RouterLink to="/dashboard" :class="sidebarItemClasses">
+          <li>
+            <RouterLink to="/financial-trend" :class="sidebarItemClasses">
               <svg :class="sidebarIconClasses" fill="currentColor" viewBox="0 0 22 21">
                 <path d="M16.975 11H10V4.025a1 1 0 0 0-1.066-.998 8.5 8.5 0 1 0 9.039 9.039.999.999 0 0 0-1-1.066h.002Z"/>
                 <path d="M12.5 0c-.157 0-.311.01-.565.027A1 1 0 0 0 11 1.02V10h8.975a1 1 0 0 0 1-.935c.013-.188.028-.374.028-.565A8.51 8.51 0 0 0 12.5 0Z"/>
               </svg>
-              <span :class="sidebarLabelClasses">Financial Analytics</span>
+              <span :class="sidebarLabelClasses">Financial Trend</span>
             </RouterLink>
-          </li> -->
+          </li>
+          <li>
+            <RouterLink to="/financial-summary" :class="sidebarItemClasses">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v18m14-12-4 4-3-3-4 4M7 19h12" />
+              </svg>
+              <span :class="sidebarLabelClasses">Financial Summary</span>
+            </RouterLink>
+          </li>
         </ul>
       </div>
 
@@ -265,13 +272,21 @@ onBeforeUnmount(() => {
         </div>
     </main>
 
-    <div v-if="logoutLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
-      <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
-        <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
-        <p class="text-lg font-semibold text-slate-900">Logging out ...</p>
+    <Transition name="loading-fade">
+      <div v-if="logoutLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+        <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+          <div class="relative mb-4 h-12 w-12">
+            <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
+            <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
+          </div>
+          <p class="text-lg font-semibold text-slate-900">Logging out ...</p>
+        </div>
       </div>
-    </div>
+    </Transition>
 
     <ToastContainer />
   </div>
 </template>
+
+
+
