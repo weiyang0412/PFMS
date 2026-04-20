@@ -2,7 +2,7 @@
 import { AxiosError } from 'axios';
 import axiosInstance from '../../lib/axios';
 import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 import { useUserStore } from '../../stores/userStore';
 
 interface LoginForm {
@@ -52,33 +52,51 @@ const login = async (payload: LoginForm) => {
 
 
 <template>
-    <div class="fixed inset-0 flex items-center justify-center overflow-hidden bg-gray-900">
-        <form @submit.prevent="login(form)" class="max-w-sm w-full p-4 bg-white rounded-lg shadow-md dark:bg-gray-800">
-            <div class="mb-5">
-                <label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label>
-                <input type="email" id="email" v-model="form.email"
-                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                    placeholder="name@flowbite.com" required />
-                <template v-if="errors.email?.length">
-                    <span v-for="error in errors.email" :key="error" class="text-xs text-red-500 italic">
-                        {{ error }}
-                    </span>
-                </template>
-            </div>
+    <div class="fixed inset-0 z-50 overflow-hidden bg-slate-950">
+        <div class="pointer-events-none absolute -top-32 -left-24 h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-32 -right-20 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl"></div>
+        <div class="flex h-full items-center justify-center px-4">
+            <form
+                @submit.prevent="login(form)"
+                class="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-900/80 p-7 shadow-[0_20px_60px_-20px_rgba(8,47,73,0.75)] backdrop-blur-md"
+            >
+                <div class="mb-6">
+                    <p class="text-sm font-medium text-cyan-300">Welcome back</p>
+                    <h1 class="mt-1 text-2xl font-semibold tracking-tight text-white">Sign in to SmartBudget</h1>
+                    <p class="mt-2 text-sm text-slate-300">Track your spending and goals in one place.</p>
+                </div>
+                <div class="mb-4">
+                    <label for="email" class="mb-2 block text-sm font-medium text-slate-100">Email</label>
+                    <input
+                        id="email"
+                        v-model="form.email"
+                        type="email"
+                        class="block w-full rounded-xl border border-slate-600/80 bg-slate-700/45 p-3 text-sm text-slate-100 placeholder:text-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                        :class="errors.email?.length ? 'border-red-400/80 focus:border-red-400 focus:ring-red-500/30' : ''"
+                        placeholder="name@flowbite.com"
+                        required
+                    />
+                    <template v-if="errors.email?.length">
+                        <span v-for="error in errors.email" :key="error" class="mt-1 block text-xs text-red-300">
+                            {{ error }}
+                        </span>
+                    </template>
+                </div>
             <div class="mb-5">
                 <label for="password"
-                    class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Password</label>
+                    class="mb-2 block text-sm font-medium text-slate-100">Password</label>
                 <div class="relative">
                     <input
                         :type="showPassword ? 'text' : 'password'"
                         id="password"
                         v-model="form.password"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 pr-10 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                        class="block w-full rounded-xl border border-slate-600/80 bg-slate-700/45 p-3 pr-12 text-sm text-slate-100 placeholder:text-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                        :class="errors.password?.length ? 'border-red-400/80 focus:border-red-400 focus:ring-red-500/30' : ''"
                         required
                     />
                     <button
                         type="button"
-                        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        class="absolute inset-y-0 right-2 my-auto inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-600/70 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                         :aria-label="showPassword ? 'Hide password' : 'Show password'"
                         :title="showPassword ? 'Hide password' : 'Show password'"
                         @click="showPassword = !showPassword"
@@ -95,22 +113,28 @@ const login = async (payload: LoginForm) => {
                     </button>
                 </div>
                 <template v-if="errors.password?.length">
-                    <span v-for="error in errors.password" :key="error" class="text-xs text-red-500 italic">
+                    <span v-for="error in errors.password" :key="error" class="mt-1 block text-xs text-red-300">
                         {{ error }}
                     </span>
                 </template>
             </div>
-            <button
-                type="submit"
-                class="inline-flex items-center justify-center text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-            >
-                Login
-            </button>
-        </form>
-        <div v-if="isLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div class="flex flex-col items-center p-6 bg-white rounded-lg shadow-xl">
-                <span class="w-12 h-12 mb-4 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
-                <p class="text-lg font-medium text-gray-900">Logging in...</p>
+                <button
+                    type="submit"
+                    class="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:brightness-110 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="isLoading"
+                >
+                    {{ isLoading ? 'Logging in...' : 'Login' }}
+                </button>
+                <p class="mt-4 text-center text-sm text-slate-300">
+                    No account yet?
+                    <RouterLink to="/register" class="font-semibold text-cyan-300 transition hover:text-cyan-200">Create one</RouterLink>
+                </p>
+            </form>
+        </div>
+        <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+            <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+                <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
+                <p class="text-lg font-semibold text-slate-900">Logging in ...</p>
             </div>
         </div>
     </div>

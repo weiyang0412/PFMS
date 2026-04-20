@@ -253,10 +253,10 @@ onBeforeUnmount(() => {
         </div>
     </main>
 
-    <div v-if="logoutLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="flex flex-col items-center p-6 bg-white rounded-lg shadow-xl">
-        <span class="w-12 h-12 mb-4 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
-        <p class="text-lg font-medium text-gray-900">Logging out...</p>
+    <div v-if="logoutLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+      <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+        <span class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></span>
+        <p class="text-lg font-semibold text-slate-900">Logging out ...</p>
       </div>
     </div>
 
