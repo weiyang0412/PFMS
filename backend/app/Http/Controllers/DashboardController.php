@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\StudentSemester;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -11,11 +12,18 @@ class DashboardController extends Controller
     {
         $user = $request->user();
         $today = Carbon::today();
-        $currentMonthStart = $today->copy()->startOfMonth();
-        $currentMonthEnd = $today->copy()->endOfMonth();
-        $previousMonthDate = $today->copy()->subMonthNoOverflow();
-        $previousMonthStart = $previousMonthDate->copy()->startOfMonth();
-        $previousMonthEnd = $previousMonthDate->copy()->endOfMonth();
+        $periodType = $this->resolvePeriodType($request->query('period'), $user->profile_type);
+        $anchorMonth = $this->resolveAnchorMonth($request->query('month'));
+        $selectedSemester = $periodType === 'semester'
+            ? $this->resolveStudentSemester($request, $anchorMonth)
+            : null;
+
+        [$currentStart, $currentEnd, $periodLabel] = $periodType === 'semester'
+            ? $this->semesterRange($selectedSemester, $anchorMonth)
+            : $this->monthRange($anchorMonth);
+        [$previousStart, $previousEnd] = $periodType === 'semester'
+            ? $this->previousSemesterRange($currentStart, $currentEnd)
+            : $this->previousMonthRange($anchorMonth);
 
         $accounts = $user->accounts()->latest()->get();
         $transactions = $user->transactions()
@@ -26,62 +34,58 @@ class DashboardController extends Controller
 
         $totalBalance = (float) $accounts->sum('balance');
 
-        $currentMonthTransactions = $transactions->filter(function ($transaction) use ($currentMonthStart, $currentMonthEnd) {
+        $currentPeriodTransactions = $transactions->filter(function ($transaction) use ($currentStart, $currentEnd) {
             return $transaction->transaction_date !== null
-                && $transaction->transaction_date->between($currentMonthStart, $currentMonthEnd);
+                && $transaction->transaction_date->between($currentStart, $currentEnd);
         });
 
-        $previousMonthTransactions = $transactions->filter(function ($transaction) use ($previousMonthStart, $previousMonthEnd) {
+        $previousPeriodTransactions = $transactions->filter(function ($transaction) use ($previousStart, $previousEnd) {
             return $transaction->transaction_date !== null
-                && $transaction->transaction_date->between($previousMonthStart, $previousMonthEnd);
+                && $transaction->transaction_date->between($previousStart, $previousEnd);
         });
 
-        $monthlyIncome = $this->sumByType($currentMonthTransactions, 'income');
-        $monthlyExpense = $this->sumByType($currentMonthTransactions, 'expense');
-        $previousIncome = $this->sumByType($previousMonthTransactions, 'income');
-        $previousExpense = $this->sumByType($previousMonthTransactions, 'expense');
-        $netCashflow = $monthlyIncome - $monthlyExpense;
-        $savingsRate = $monthlyIncome > 0 ? round(($netCashflow / $monthlyIncome) * 100, 1) : 0;
+        $periodIncome = $this->sumByType($currentPeriodTransactions, 'income');
+        $periodExpense = $this->sumByType($currentPeriodTransactions, 'expense');
+        $previousIncome = $this->sumByType($previousPeriodTransactions, 'income');
+        $previousExpense = $this->sumByType($previousPeriodTransactions, 'expense');
+        $netCashflow = $periodIncome - $periodExpense;
+        $savingsRate = $periodIncome > 0 ? round(($netCashflow / $periodIncome) * 100, 1) : 0;
 
-        $monthlyTrend = collect(range(5, 1))
-            ->map(function ($monthsAgo) use ($today, $transactions) {
-                $date = $today->copy()->subMonthsNoOverflow($monthsAgo);
+        $trendMonths = $periodType === 'semester'
+            ? $this->monthsInRange($currentStart, $currentEnd)
+            : collect(range(5, 0))->map(fn ($monthsAgo) => $anchorMonth->copy()->subMonthsNoOverflow($monthsAgo))->values();
+
+        $monthlyTrend = $trendMonths
+            ->map(function (Carbon $date) use ($transactions) {
                 $start = $date->copy()->startOfMonth();
                 $end = $date->copy()->endOfMonth();
-
                 $items = $transactions->filter(function ($transaction) use ($start, $end) {
                     return $transaction->transaction_date !== null
                         && $transaction->transaction_date->between($start, $end);
                 });
-
                 $income = $this->sumByType($items, 'income');
                 $expense = $this->sumByType($items, 'expense');
 
                 return [
                     'month' => $date->format('M'),
+                    'month_key' => $date->format('Y-m'),
                     'income' => round($income, 2),
                     'expense' => round($expense, 2),
                     'net' => round($income - $expense, 2),
                 ];
             })
-            ->push([
-                'month' => $today->format('M'),
-                'income' => round($monthlyIncome, 2),
-                'expense' => round($monthlyExpense, 2),
-                'net' => round($netCashflow, 2),
-            ])
             ->values();
 
-        $categoryBreakdown = $currentMonthTransactions
+        $categoryBreakdown = $currentPeriodTransactions
             ->filter(fn ($transaction) => strtolower((string) optional($transaction->transactionType)->name) === 'expense')
             ->groupBy(fn ($transaction) => optional($transaction->transactionCategory)->name ?: 'Uncategorized')
-            ->map(function ($items, $category) use ($monthlyExpense) {
+            ->map(function ($items, $category) use ($periodExpense) {
                 $amount = (float) $items->sum('amount');
 
                 return [
                     'category' => $category,
                     'amount' => round($amount, 2),
-                    'percentage' => $monthlyExpense > 0 ? round(($amount / $monthlyExpense) * 100, 1) : 0,
+                    'percentage' => $periodExpense > 0 ? round(($amount / $periodExpense) * 100, 1) : 0,
                 ];
             })
             ->sortByDesc('amount')
@@ -103,7 +107,7 @@ class DashboardController extends Controller
             ->values();
 
         $largestExpenseCategory = $categoryBreakdown->first();
-        $averageExpense = $currentMonthTransactions
+        $averageExpense = $currentPeriodTransactions
             ->filter(fn ($transaction) => strtolower((string) optional($transaction->transactionType)->name) === 'expense')
             ->avg('amount');
 
@@ -111,12 +115,12 @@ class DashboardController extends Controller
             'overview' => [
                 'total_balance' => round($totalBalance, 2),
                 'account_count' => $accounts->count(),
-                'monthly_income' => round($monthlyIncome, 2),
-                'monthly_expense' => round($monthlyExpense, 2),
+                'monthly_income' => round($periodIncome, 2),
+                'monthly_expense' => round($periodExpense, 2),
                 'net_cashflow' => round($netCashflow, 2),
                 'savings_rate' => $savingsRate,
-                'income_change_pct' => $this->calculatePercentageChange($monthlyIncome, $previousIncome),
-                'expense_change_pct' => $this->calculatePercentageChange($monthlyExpense, $previousExpense),
+                'income_change_pct' => $this->calculatePercentageChange($periodIncome, $previousIncome),
+                'expense_change_pct' => $this->calculatePercentageChange($periodExpense, $previousExpense),
             ],
             'accounts' => $accounts->map(function ($account) {
                 return [
@@ -132,13 +136,110 @@ class DashboardController extends Controller
                 'largest_expense_category' => $largestExpenseCategory['category'] ?? null,
                 'largest_expense_amount' => $largestExpenseCategory['amount'] ?? 0,
                 'average_expense' => round((float) ($averageExpense ?? 0), 2),
-                'transactions_this_month' => $currentMonthTransactions->count(),
+                'transactions_this_month' => $currentPeriodTransactions->count(),
             ],
             'period' => [
-                'label' => $today->format('F Y'),
+                'type' => $periodType,
+                'label' => $periodLabel,
+                'comparison_label' => $periodType === 'semester' ? 'vs previous semester' : 'vs last month',
                 'updated_at' => $today->format('Y-m-d'),
+                'month' => $anchorMonth->format('Y-m'),
+                'semester_id' => $selectedSemester ? $selectedSemester->id : null,
             ],
         ]);
+    }
+
+    private function resolvePeriodType(?string $input, ?string $profileType): string
+    {
+        if ($profileType !== 'student') {
+            return 'monthly';
+        }
+        return in_array($input, ['monthly', 'semester'], true) ? $input : 'monthly';
+    }
+
+    private function resolveAnchorMonth(?string $input): Carbon
+    {
+        try {
+            if ($input && preg_match('/^\d{4}-\d{2}$/', $input)) {
+                return Carbon::createFromFormat('Y-m', $input)->startOfMonth();
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return Carbon::today()->startOfMonth();
+    }
+
+    private function monthRange(Carbon $anchorMonth): array
+    {
+        $start = $anchorMonth->copy()->startOfMonth();
+        $end = $anchorMonth->copy()->endOfMonth();
+        return [$start, $end, $start->format('F Y')];
+    }
+
+    private function previousMonthRange(Carbon $anchorMonth): array
+    {
+        $previous = $anchorMonth->copy()->subMonthNoOverflow();
+        return [$previous->copy()->startOfMonth(), $previous->copy()->endOfMonth()];
+    }
+
+    private function semesterRange(?StudentSemester $semester, Carbon $anchorMonth): array
+    {
+        if ($semester) {
+            $start = Carbon::parse($semester->start_date)->startOfDay();
+            $end = Carbon::parse($semester->end_date)->endOfDay();
+            return [$start, $end, $semester->name];
+        }
+
+        $start = $anchorMonth->copy()->startOfMonth();
+        $end = $anchorMonth->copy()->endOfMonth();
+
+        return [$start, $end, $start->format('F Y')];
+    }
+
+    private function previousSemesterRange(Carbon $currentStart, Carbon $currentEnd): array
+    {
+        $durationDays = max(1, (int) $currentStart->diffInDays($currentEnd) + 1);
+        $end = $currentStart->copy()->subDay()->endOfDay();
+        $start = $end->copy()->subDays($durationDays - 1)->startOfDay();
+        return [$start, $end];
+    }
+
+    private function resolveStudentSemester(Request $request, Carbon $anchorMonth): ?StudentSemester
+    {
+        $semesterId = (int) $request->query('semester_id');
+        if ($semesterId > 0) {
+            return $request->user()->studentSemesters()->whereKey($semesterId)->first();
+        }
+
+        $monthStart = $anchorMonth->copy()->startOfMonth()->toDateString();
+        $monthEnd = $anchorMonth->copy()->endOfMonth()->toDateString();
+        $active = $request->user()->studentSemesters()
+            ->whereDate('start_date', '<=', $monthEnd)
+            ->whereDate('end_date', '>=', $monthStart)
+            ->orderBy('start_date')
+            ->first();
+
+        if ($active) {
+            return $active;
+        }
+
+        return $request->user()->studentSemesters()
+            ->orderByDesc('end_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function monthsInRange(Carbon $start, Carbon $end)
+    {
+        $months = collect();
+        $cursor = $start->copy();
+
+        while ($cursor->lte($end)) {
+            $months->push($cursor->copy());
+            $cursor->addMonthNoOverflow();
+        }
+
+        return $months;
     }
 
     private function sumByType($transactions, string $type): float

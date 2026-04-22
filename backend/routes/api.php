@@ -3,8 +3,10 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\StudentSemesterController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionOptionController;
+use App\Http\Controllers\UserPreferenceController;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+    Route::patch('/user/preferences', [UserPreferenceController::class, 'update']);
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 
@@ -51,4 +54,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/budgets', [BudgetController::class, 'store']);
     Route::post('/budgets/copy-previous-month', [BudgetController::class, 'copyPreviousMonth']);
     Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy']);
+
+    Route::get('/student-semesters', [StudentSemesterController::class, 'index']);
+    Route::post('/student-semesters', [StudentSemesterController::class, 'store']);
+    Route::patch('/student-semesters/{studentSemester}', [StudentSemesterController::class, 'update']);
+    Route::delete('/student-semesters/{studentSemester}', [StudentSemesterController::class, 'destroy']);
 });

@@ -13,6 +13,7 @@ use App\Models\TransactionCategory;
 use App\Models\Transaction;
 use App\Models\TransactionType;
 use App\Models\Budget;
+use App\Models\StudentSemester;
 
 class User extends Authenticatable
 {
@@ -27,6 +28,11 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'profile_type',
+        'preferred_period',
+        'semester_start_month',
+        'semester_length_months',
+        'onboarding_completed_at',
     ];
 
     /**
@@ -46,6 +52,9 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'semester_start_month' => 'integer',
+        'semester_length_months' => 'integer',
+        'onboarding_completed_at' => 'datetime',
     ];
 
     public function transactions(): HasMany
@@ -71,5 +80,10 @@ class User extends Authenticatable
     public function budgets(): HasMany
     {
         return $this->hasMany(Budget::class);
+    }
+
+    public function studentSemesters(): HasMany
+    {
+        return $this->hasMany(StudentSemester::class);
     }
 }
