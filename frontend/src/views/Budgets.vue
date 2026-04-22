@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axiosInstance from '../lib/axios';
 import { useToast } from '../composables/useToast.js';
-import { formatCurrencyMYR } from '../lib/formatters.js';
+import { formatCurrencyMYR, malaysiaCurrentMonthYm } from '../lib/formatters.js';
 
 interface BudgetItem {
   category_id: number;
@@ -24,7 +24,7 @@ interface BudgetSummary {
   total_overspent: number;
 }
 
-const month = ref(new Date().toISOString().slice(0, 7));
+const month = ref(malaysiaCurrentMonthYm());
 const items = ref<BudgetItem[]>([]);
 const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const isLoading = ref(false);
@@ -342,7 +342,6 @@ watch(
     </div>
   </div>
 </template>
-
 
 
 

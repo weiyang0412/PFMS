@@ -264,12 +264,13 @@ onMounted(() => {
       </Teleport>
 
       <Teleport to="body">
-        <div
-          v-if="showModal"
-          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
-          @click.self="closeModal"
-        >
-          <div class="relative z-[101] w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl">
+        <Transition name="modal-popup">
+          <div
+            v-if="showModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
+            @click.self="closeModal"
+          >
+          <div class="modal-panel-animate relative z-[101] w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl">
             <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <h2 class="text-xl font-semibold text-slate-900">
@@ -329,16 +330,18 @@ onMounted(() => {
               </div>
             </form>
           </div>
-        </div>
+          </div>
+        </Transition>
       </Teleport>
 
       <Teleport to="body">
-        <div
-          v-if="showConfirmDelete"
-          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
-          @click.self="showConfirmDelete = false"
-        >
-          <div class="relative z-[101] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+        <Transition name="modal-popup">
+          <div
+            v-if="showConfirmDelete"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
+            @click.self="closeModal"
+          >
+          <div class="modal-panel-animate relative z-[101] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div class="p-6">
               <h3 class="text-xl font-semibold text-slate-900">Delete this account?</h3>
               <p class="mt-2 text-sm text-slate-500">
@@ -347,7 +350,7 @@ onMounted(() => {
               <div class="mt-6 flex justify-end gap-3">
                 <button
                   type="button"
-                  @click="showConfirmDelete = false"
+                  @click="closeModal"
                   class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
@@ -367,13 +370,12 @@ onMounted(() => {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </Transition>
       </Teleport>
 
     </div>
   </div>
 </template>
-
-
 
 

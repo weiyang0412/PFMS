@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import axiosInstance from '../lib/axios';
 import { useToast } from '../composables/useToast.js';
-import { formatCurrencyMYR, formatYmdDate } from '../lib/formatters.js';
+import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm, malaysiaTodayYmd } from '../lib/formatters.js';
 
 type Mode = 'add' | 'edit' | 'view';
 interface TransactionForm { description: string; amount: number | null; transaction_type_id: number | null; transaction_category_id: number | null; transaction_date: string; }
@@ -30,7 +30,7 @@ interface BudgetSummary {
   total_overspent: number;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => malaysiaTodayYmd();
 const form = reactive<TransactionForm>({ description: '', amount: null, transaction_type_id: null, transaction_category_id: null, transaction_date: today() });
 const errors = reactive<Record<string, string[]>>({ description: [], amount: [], type: [], category: [], transaction_date: [] });
 const transactions = ref<Array<Record<string, any>>>([]);
@@ -54,7 +54,7 @@ const budgetItems = ref<BudgetItem[]>([]);
 const typeFilter = ref('all');
 const categoryFilter = ref('all');
 const descriptionSearch = ref('');
-const monthFilter = ref(new Date().toISOString().slice(0, 7));
+const monthFilter = ref(malaysiaCurrentMonthYm());
 const toast = useToast();
 const route = useRoute();
 
@@ -186,8 +186,7 @@ const loadTransactions = async (page = 1) => {
   } catch (error) { console.error(error); } finally { isLoading.value = false; }
 };
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return malaysiaCurrentMonthYm();
 };
 const loadBudgetSnapshot = async () => {
   isBudgetLoading.value = true;
@@ -307,9 +306,10 @@ watch(
       </section>
 
       <Teleport to="body">
-        <div v-if="showModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
-          @click.self="closeModal">
-          <div class="relative z-[101] max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl">
+        <Transition name="modal-popup">
+          <div v-if="showModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
+            @click.self="closeModal">
+          <div class="modal-panel-animate relative z-[101] max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl">
             <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <h2 class="text-xl font-semibold text-slate-900">{{ mode === 'view' ? 'Transaction Details' : mode ===
@@ -398,7 +398,8 @@ watch(
                     mode === 'edit' ? 'Save Changes' : 'Save Transaction' }}</button></div>
             </form>
           </div>
-        </div>
+          </div>
+        </Transition>
       </Teleport>
 
       <div class="grid gap-6 lg:grid-cols-3">
@@ -561,15 +562,16 @@ watch(
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="showConfirmDelete"
-          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
-          @click.self="showConfirmDelete = false">
-          <div class="relative z-[101] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+        <Transition name="modal-popup">
+          <div v-if="showConfirmDelete"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-8"
+            @click.self="closeModal">
+          <div class="modal-panel-animate relative z-[101] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div class="p-6">
               <h3 class="text-xl font-semibold text-slate-900">Delete this transaction?</h3>
               <p class="mt-2 text-sm text-slate-500">This action cannot be undone. Confirm to remove this transaction
                 permanently.</p>
-              <div class="mt-6 flex justify-end gap-3"><button type="button" @click="showConfirmDelete = false"
+              <div class="mt-6 flex justify-end gap-3"><button type="button" @click="closeModal"
                   class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button><button
                   type="button" @click="deleteTransaction" :disabled="isDeleting"
                   class="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-60"><span
@@ -578,13 +580,11 @@ watch(
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </Transition>
       </Teleport>
     </div>
 
   </div>
 </template>
-
-
-
 

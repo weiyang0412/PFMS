@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import axiosInstance from '../../lib/axios';
 import { useUserStore } from '../../stores/userStore';
-import { formatCurrencyMYR, formatYmdDate } from '../../lib/formatters.js';
+import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm } from '../../lib/formatters.js';
 
 interface DashboardOverview {
   total_balance: number;
@@ -119,8 +119,7 @@ const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallba
 
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return malaysiaCurrentMonthYm();
 };
 
 const loadDashboard = async (manualRefresh = false) => {
