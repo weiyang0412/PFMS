@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../lib/axios';
+import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate } from '../lib/formatters.js';
 
 interface DashboardOverview {
@@ -50,8 +51,12 @@ interface DashboardTrendItem {
 }
 
 interface DashboardPeriod {
+  type?: 'monthly' | 'semester';
   label: string;
+  comparison_label?: string;
   updated_at: string;
+  month?: string;
+  semester_id?: number | null;
 }
 
 interface DashboardSummary {
@@ -62,6 +67,12 @@ interface DashboardSummary {
   accounts: DashboardAccount[];
   monthly_trend: DashboardTrendItem[];
   period: DashboardPeriod;
+}
+interface StudentSemester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
 }
 
 const defaultOverview: DashboardOverview = {
@@ -86,6 +97,12 @@ const isLoading = ref(false);
 const isRefreshing = ref(false);
 const loadError = ref('');
 const summary = ref<DashboardSummary | null>(null);
+const userStore = useUserStore();
+const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
+const periodType = ref<'monthly' | 'semester'>('monthly');
+const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+const studentSemesters = ref<StudentSemester[]>([]);
+const selectedSemesterId = ref<number | null>(null);
 
 const overview = computed(() => summary.value?.overview ?? defaultOverview);
 const insights = computed(() => summary.value?.insights ?? defaultInsights);
@@ -94,9 +111,20 @@ const categories = computed(() => summary.value?.category_breakdown ?? []);
 const accounts = computed(() => summary.value?.accounts ?? []);
 const monthlyTrend = computed(() => summary.value?.monthly_trend ?? []);
 const period = computed(() => summary.value?.period ?? { label: 'this month', updated_at: '' });
+const periodMetricLabel = computed(() => periodType.value === 'semester' ? 'Semester' : 'Monthly');
 
 const money = (value = 0) => formatCurrencyMYR(value);
 const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
+const longDate = (value = '') => {
+  if (!value) return '-';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed);
+};
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 
 const topCategories = computed(() => [...categories.value].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5));
@@ -120,14 +148,45 @@ const accountContribution = computed(() => {
     contribution: (Number(account.balance || 0) / total) * 100,
   }));
 });
+const buildPeriodParams = () => {
+  const params: Record<string, string | number> = {
+    period: periodType.value,
+    month: selectedMonth.value,
+  };
+  if (periodType.value === 'semester' && selectedSemesterId.value) {
+    params.semester_id = selectedSemesterId.value;
+  }
+  return params;
+};
+
+const loadStudentSemesters = async () => {
+  if (!isStudentProfile.value) {
+    studentSemesters.value = [];
+    selectedSemesterId.value = null;
+    return;
+  }
+
+  try {
+    const { data } = await axiosInstance.get('/student-semesters');
+    studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
+    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
+      selectedSemesterId.value = studentSemesters.value[0].id;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const loadSummary = async (manualRefresh = false) => {
   if (manualRefresh) isRefreshing.value = true;
   else isLoading.value = true;
   loadError.value = '';
   try {
-    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary');
+    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary', { params: buildPeriodParams() });
     summary.value = data;
+    if (data?.period?.semester_id) {
+      selectedSemesterId.value = data.period.semester_id;
+    }
   } catch (error) {
     console.error(error);
     loadError.value = 'Unable to load financial summary right now.';
@@ -138,8 +197,20 @@ const loadSummary = async (manualRefresh = false) => {
 };
 
 onMounted(() => {
-  loadSummary();
+  periodType.value = isStudentProfile.value
+    ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly')
+    : 'monthly';
+  loadStudentSemesters().finally(() => loadSummary());
 });
+watch(
+  () => userStore.user?.profile_type,
+  (nextType) => {
+    if (nextType !== 'student' && periodType.value !== 'monthly') {
+      periodType.value = 'monthly';
+      selectedSemesterId.value = null;
+    }
+  },
+);
 </script>
 
 <template>
@@ -153,6 +224,34 @@ onMounted(() => {
             <p class="mt-2 text-sm text-slate-300">Summary data for {{ period.label }}.</p>
           </div>
           <div class="flex items-center gap-3">
+            <div v-if="isStudentProfile" class="inline-flex h-10 items-center rounded-xl border border-white/20 bg-white/10 p-0.5 shadow-sm">
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'monthly' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'monthly'; loadSummary(true)"
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'semester' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'semester'; loadSummary(true)"
+              >
+                Semester
+              </button>
+            </div>
+            <select
+              v-if="isStudentProfile && periodType === 'semester'"
+              v-model.number="selectedSemesterId"
+              @change="loadSummary(true)"
+              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
+            >
+              <option v-for="semester in studentSemesters" :key="semester.id" :value="semester.id">
+                {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
+              </option>
+            </select>
             <button
               type="button"
               @click="loadSummary(true)"
@@ -173,14 +272,14 @@ onMounted(() => {
           <p class="mt-2 text-xs text-slate-500">{{ overview.account_count }} accounts</p>
         </article>
         <article class="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
-          <p class="text-sm text-slate-500">Monthly Income</p>
+          <p class="text-sm text-slate-500">{{ periodMetricLabel }} Income</p>
           <p class="mt-2 text-2xl font-semibold text-emerald-700">{{ money(overview.monthly_income) }}</p>
-          <p class="mt-2 text-xs text-slate-500">{{ change(overview.income_change_pct) }} vs last month</p>
+          <p class="mt-2 text-xs text-slate-500">{{ change(overview.income_change_pct) }} {{ period.comparison_label || 'vs last month' }}</p>
         </article>
         <article class="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
-          <p class="text-sm text-slate-500">Monthly Expense</p>
+          <p class="text-sm text-slate-500">{{ periodMetricLabel }} Expense</p>
           <p class="mt-2 text-2xl font-semibold text-rose-700">{{ money(overview.monthly_expense) }}</p>
-          <p class="mt-2 text-xs text-slate-500">{{ change(overview.expense_change_pct) }} vs last month</p>
+          <p class="mt-2 text-xs text-slate-500">{{ change(overview.expense_change_pct) }} {{ period.comparison_label || 'vs last month' }}</p>
         </article>
         <article class="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
           <p class="text-sm text-slate-500">Net Change (MoM)</p>
@@ -211,7 +310,7 @@ onMounted(() => {
               <p class="mt-2 text-lg font-semibold">{{ money(insights.average_expense) }}</p>
             </div>
             <div class="rounded-2xl bg-white/5 p-4">
-              <p class="text-sm text-slate-300">Transactions this month</p>
+              <p class="text-sm text-slate-300">Transactions this period</p>
               <p class="mt-2 text-lg font-semibold">{{ insights.transactions_this_month }}</p>
             </div>
           </div>
@@ -297,6 +396,4 @@ onMounted(() => {
     </Teleport>
   </div>
 </template>
-
-
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router';
 import { useUserStore } from './stores/userStore';
 import appLogo from './assets/logo.png';
@@ -10,11 +10,8 @@ import ToastContainer from './components/ToastContainer.vue';
 
 const userStore = useUserStore();
 const isSidebarOpen = ref(false);
-const isOpen = ref(false);
-const dropdownRef = ref<HTMLElement | null>(null);
+const isSettingsMenuOpen = ref(false);
 const logoutLoading = ref(false);
-
-const hideSidebarRoutes = [''];
 
 const router = useRouter();
 const route = useRoute();
@@ -28,6 +25,15 @@ watch(
       isSidebarOpen.value = false;
     }
   }
+);
+watch(
+  () => route.path,
+  (path) => {
+    if (path.startsWith('/settings/')) {
+      isSettingsMenuOpen.value = true;
+    }
+  },
+  { immediate: true },
 );
 
 const logout = async () => {
@@ -43,9 +49,19 @@ const logout = async () => {
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value;
 };
+const toggleSettingsMenu = () => {
+  if (!isSidebarOpen.value) {
+    isSidebarOpen.value = true;
+    isSettingsMenuOpen.value = true;
+    return;
+  }
+
+  isSettingsMenuOpen.value = !isSettingsMenuOpen.value;
+};
+const isSettingsRoute = computed(() => String(route.path).startsWith('/settings/'));
 
 const shouldShowSidebar = computed(() => {
-  return !hideSidebarRoutes.includes(String(route.name ?? ''));
+  return !route.meta?.noSidebar;
 });
 
 const sidebarItemClasses = computed(() => {
@@ -84,24 +100,17 @@ const sidebarActionClasses = computed(() => {
     isSidebarOpen.value ? 'justify-start' : 'justify-center',
   ].join(' ');
 });
-
-const toggleDropdown = () => {
-  isOpen.value = !isOpen.value;
-};
-
-const handleClickOutside = (event: MouseEvent) => {
-  if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
-    isOpen.value = false;
-  }
+const settingsChildClasses = (isActive: boolean) => {
+  return [
+    'group flex items-center rounded-lg border px-3 py-2 text-sm whitespace-nowrap transition-all duration-200',
+    isActive
+      ? 'border-cyan-300/30 bg-cyan-400/15 text-white shadow-[0_8px_24px_-10px_rgba(34,211,238,0.75)]'
+      : 'border-transparent text-slate-300 hover:border-white/10 hover:bg-white/10 hover:text-white',
+  ].join(' ');
 };
 
 onMounted(() => {
   userStore.fetchUser();
-  document.addEventListener('click', handleClickOutside);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', handleClickOutside);
 });
 </script>
 
@@ -164,14 +173,6 @@ onBeforeUnmount(() => {
             </RouterLink>
           </li>
           <li>
-            <RouterLink to="/transaction-options" :class="sidebarItemClasses">
-              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H21M3 6h3m4 12h11M3 18h3m8-6h7M3 12h7m-1-8v4m8 8v4"/>
-              </svg>
-              <span :class="sidebarLabelClasses">Manage Options</span>
-            </RouterLink>
-          </li>
-          <li>
             <RouterLink to="/budgets" :class="sidebarItemClasses">
               <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8M8 12h5M6 3h12a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" />
@@ -195,6 +196,42 @@ onBeforeUnmount(() => {
               </svg>
               <span :class="sidebarLabelClasses">Financial Summary</span>
             </RouterLink>
+          </li>
+          <li>
+            <button
+              type="button"
+              :class="[sidebarItemClasses, 'w-full', isSettingsRoute ? 'border-cyan-300/30 bg-cyan-400/15 text-white shadow-[0_8px_24px_-10px_rgba(34,211,238,0.75)]' : '']"
+              @click="toggleSettingsMenu"
+            >
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1 1 0 0 1 1.35-.936l1.007.402a1 1 0 0 0 1.054-.155l.78-.65a1 1 0 0 1 1.497.356l.423.97a1 1 0 0 0 .894.59h1.047a1 1 0 0 1 .936 1.35l-.402 1.007a1 1 0 0 0 .155 1.054l.65.78a1 1 0 0 1-.356 1.497l-.97.423a1 1 0 0 0-.59.894v1.047a1 1 0 0 1-1.35.936l-1.007-.402a1 1 0 0 0-1.054.155l-.78.65a1 1 0 0 1-1.497-.356l-.423-.97a1 1 0 0 0-.894-.59h-1.047a1 1 0 0 1-.936-1.35l.402-1.007a1 1 0 0 0-.155-1.054l-.65-.78a1 1 0 0 1 .356-1.497l.97-.423a1 1 0 0 0 .59-.894V6.33Z" />
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+              </svg>
+              <span :class="sidebarLabelClasses">Settings</span>
+              <span v-if="isSidebarOpen" class="ml-auto text-slate-400">
+                {{ isSettingsMenuOpen ? '▾' : '▸' }}
+              </span>
+            </button>
+            <div v-if="isSidebarOpen && isSettingsMenuOpen" class="mt-2 ml-3 space-y-1 overflow-hidden border-l border-white/10 pl-3">
+              <RouterLink
+                to="/settings/profile"
+                :class="settingsChildClasses(route.name === 'settings-profile')"
+              >
+                Edit Profile
+              </RouterLink>
+              <RouterLink
+                to="/settings/semesters"
+                :class="settingsChildClasses(route.name === 'settings-semesters')"
+              >
+                Manage Semester
+              </RouterLink>
+              <RouterLink
+                to="/settings/options"
+                :class="settingsChildClasses(route.name === 'settings-options')"
+              >
+                Manage Options
+              </RouterLink>
+            </div>
           </li>
         </ul>
       </div>
@@ -287,6 +324,4 @@ onBeforeUnmount(() => {
     <ToastContainer />
   </div>
 </template>
-
-
 

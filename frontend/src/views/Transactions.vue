@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import axiosInstance from '../lib/axios';
 import { useToast } from '../composables/useToast.js';
+import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm, malaysiaTodayYmd } from '../lib/formatters.js';
 
 type Mode = 'add' | 'edit' | 'view';
@@ -28,6 +29,12 @@ interface BudgetSummary {
   total_spent: number;
   warning_count: number;
   total_overspent: number;
+}
+interface StudentSemester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
 }
 
 const today = () => malaysiaTodayYmd();
@@ -57,6 +64,11 @@ const descriptionSearch = ref('');
 const monthFilter = ref(malaysiaCurrentMonthYm());
 const toast = useToast();
 const route = useRoute();
+const userStore = useUserStore();
+const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
+const selectedPeriod = computed<'monthly' | 'semester'>(() => (isStudentProfile.value ? 'semester' : 'monthly'));
+const semesters = ref<StudentSemester[]>([]);
+const selectedSemesterId = ref<number | null>(null);
 
 const clearFormErrors = () => Object.keys(errors).forEach((key) => { errors[key] = []; });
 const defaultTypeId = () => typeOptions.value[0]?.id ?? null;
@@ -79,6 +91,16 @@ const formatSignedAmount = (amount: unknown, type: unknown) => {
 };
 const formatMoney = (value: unknown) => {
   return formatCurrencyMYR(value);
+};
+const longDate = (value = '') => {
+  if (!value) return '-';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed);
 };
 const parseDateTime = (value: unknown) => {
   if (!value) return null;
@@ -173,9 +195,13 @@ const loadTransactions = async (page = 1) => {
     const params: Record<string, string | number> = {
       page,
       per_page: perPage.value,
+      period: selectedPeriod.value,
     };
     if (monthFilter.value) {
       params.month = monthFilter.value;
+    }
+    if (selectedPeriod.value === 'semester' && selectedSemesterId.value) {
+      params.semester_id = selectedSemesterId.value;
     }
 
     const { data } = await axiosInstance.get('/transactions', { params });
@@ -191,10 +217,34 @@ const currentMonth = () => {
 const loadBudgetSnapshot = async () => {
   isBudgetLoading.value = true;
   try {
-    const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth() } });
+    const params: Record<string, string | number> = {
+      month: monthFilter.value || currentMonth(),
+      period: selectedPeriod.value,
+    };
+    if (selectedPeriod.value === 'semester' && selectedSemesterId.value) {
+      params.semester_id = selectedSemesterId.value;
+    }
+    const { data } = await axiosInstance.get('/budgets', { params });
     budgetSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
     budgetItems.value = data.items || [];
   } catch (error) { console.error(error); } finally { isBudgetLoading.value = false; }
+};
+const loadSemesters = async () => {
+  if (!isStudentProfile.value) {
+    semesters.value = [];
+    selectedSemesterId.value = null;
+    return;
+  }
+
+  try {
+    const { data } = await axiosInstance.get('/student-semesters');
+    semesters.value = Array.isArray(data?.items) ? data.items : [];
+    if (!selectedSemesterId.value && semesters.value.length > 0) {
+      selectedSemesterId.value = semesters.value[0].id;
+    }
+  } catch (error) {
+    console.error(error);
+  }
 };
 
 const loadOptions = async () => {
@@ -262,18 +312,47 @@ const nextPage = () => { if (currentPage.value < totalPages.value) goToPage(curr
 const prevPage = () => { if (currentPage.value > 1) goToPage(currentPage.value - 1); };
 const handleMonthFilterChange = () => {
   loadTransactions(1);
+  loadBudgetSnapshot();
 };
 
 onMounted(async () => {
+  if (typeof route.query.semester_id === 'string' && Number(route.query.semester_id) > 0) {
+    selectedSemesterId.value = Number(route.query.semester_id);
+  }
   if (typeof route.query.month === 'string' && /^\d{4}-\d{2}$/.test(route.query.month)) {
     monthFilter.value = route.query.month;
   }
   if (typeof route.query.category === 'string' && route.query.category.trim()) {
     categoryFilter.value = route.query.category.trim();
   }
+  await loadSemesters();
   await Promise.all([loadTransactions(), loadOptions(), loadBudgetSnapshot()]);
   if (!form.transaction_type_id) form.transaction_type_id = defaultTypeId();
 });
+watch(
+  () => userStore.user?.profile_type,
+  (nextType) => {
+    if (nextType === 'student') {
+      loadSemesters().then(() => {
+        loadTransactions(1);
+        loadBudgetSnapshot();
+      });
+    } else {
+      selectedSemesterId.value = null;
+      loadTransactions(1);
+      loadBudgetSnapshot();
+    }
+  },
+);
+watch(
+  () => selectedSemesterId.value,
+  () => {
+    if (isStudentProfile.value) {
+      loadTransactions(1);
+      loadBudgetSnapshot();
+    }
+  },
+);
 
 watch(
   () => form.transaction_type_id,
@@ -407,7 +486,7 @@ watch(
           <div class="mb-4">
             <h2 class="text-xl font-semibold text-slate-900">Recent Transactions</h2>
             <p class="text-sm text-slate-500">Track your latest finance records.</p>
-            <div class="mt-4 grid gap-3 md:grid-cols-4">
+            <div class="mt-4 grid gap-3 md:grid-cols-5">
               <select v-model="typeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
                 <option value="all">All Types</option>
                 <option v-for="option in typeOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
@@ -416,6 +495,16 @@ watch(
                 <option value="all">All Categories</option>
                 <option value="__none__">No category</option>
                 <option v-for="option in categoryOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
+              </select>
+              <select
+                v-if="isStudentProfile"
+                v-model.number="selectedSemesterId"
+                class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10"
+              >
+                <option v-if="!semesters.length" :value="null" disabled>No semester selected</option>
+                <option v-for="semester in semesters" :key="semester.id" :value="semester.id">
+                  {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
+                </option>
               </select>
               <input v-model="monthFilter" type="month" @change="handleMonthFilterChange" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10" />
               <input v-model.trim="descriptionSearch" type="text" class="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10" placeholder="Search description..." />
@@ -518,7 +607,7 @@ watch(
                 <RouterLink
                   v-for="item in topBudgetAlerts"
                   :key="item.category_id"
-                  :to="{ path: '/budgets', query: { month: currentMonth(), category_id: item.category_id } }"
+                  :to="{ path: '/budgets', query: { month: monthFilter || currentMonth(), period: selectedPeriod, semester_id: selectedPeriod === 'semester' ? selectedSemesterId : undefined, category_id: item.category_id } }"
                   class="block rounded-xl border px-3 py-2 hover:opacity-95"
                   :class="item.alert_level === 'over' ? 'border-red-200 bg-red-50 border-l-4 border-l-red-500' : 'border-amber-200 bg-amber-50 border-l-4 border-l-amber-500'">
                   <div class="flex items-center justify-between text-sm">
@@ -533,7 +622,7 @@ watch(
             </div>
             <div v-else class="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">No active budget alerts. Nice work.</div>
 
-            <RouterLink :to="{ path: '/budgets', query: { month: currentMonth() } }" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+            <RouterLink :to="{ path: '/budgets', query: { month: monthFilter || currentMonth(), period: selectedPeriod, semester_id: selectedPeriod === 'semester' ? selectedSemesterId : undefined } }" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
               Manage Budgets
             </RouterLink>
           </div>
@@ -587,4 +676,3 @@ watch(
 
   </div>
 </template>
-

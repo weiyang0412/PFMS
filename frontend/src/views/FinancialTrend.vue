@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../lib/axios';
+import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate } from '../lib/formatters.js';
 
 interface DashboardTrendItem {
@@ -17,14 +18,24 @@ interface DashboardCategoryItem {
 }
 
 interface DashboardPeriod {
+  type?: 'monthly' | 'semester';
   label: string;
+  comparison_label?: string;
   updated_at: string;
+  month?: string;
+  semester_id?: number | null;
 }
 
 interface DashboardSummary {
   monthly_trend: DashboardTrendItem[];
   category_breakdown: DashboardCategoryItem[];
   period: DashboardPeriod;
+}
+interface StudentSemester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
 }
 
 type TrendRange = '3' | '6' | 'all';
@@ -38,9 +49,25 @@ const categories = ref<DashboardCategoryItem[]>([]);
 const period = ref<DashboardPeriod>({ label: 'this month', updated_at: '' });
 const trendRange = ref<TrendRange>('6');
 const chartMode = ref<ChartMode>('bar');
+const userStore = useUserStore();
+const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
+const periodType = ref<'monthly' | 'semester'>('monthly');
+const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+const studentSemesters = ref<StudentSemester[]>([]);
+const selectedSemesterId = ref<number | null>(null);
 
 const money = (value = 0) => formatCurrencyMYR(value);
 const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
+const longDate = (value = '') => {
+  if (!value) return '-';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed);
+};
 
 const displayedTrend = computed<DashboardTrendItem[]>(() => {
   if (trendRange.value === 'all') return trend.value;
@@ -90,6 +117,34 @@ const linePoints = (key: 'income' | 'expense') => {
     })
     .join(' ');
 };
+const buildPeriodParams = () => {
+  const params: Record<string, string | number> = {
+    period: periodType.value,
+    month: selectedMonth.value,
+  };
+  if (periodType.value === 'semester' && selectedSemesterId.value) {
+    params.semester_id = selectedSemesterId.value;
+  }
+  return params;
+};
+
+const loadStudentSemesters = async () => {
+  if (!isStudentProfile.value) {
+    studentSemesters.value = [];
+    selectedSemesterId.value = null;
+    return;
+  }
+
+  try {
+    const { data } = await axiosInstance.get('/student-semesters');
+    studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
+    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
+      selectedSemesterId.value = studentSemesters.value[0].id;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const loadTrend = async (manualRefresh = false) => {
   if (manualRefresh) isRefreshing.value = true;
@@ -97,10 +152,13 @@ const loadTrend = async (manualRefresh = false) => {
 
   loadError.value = '';
   try {
-    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary');
+    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary', { params: buildPeriodParams() });
     trend.value = data.monthly_trend || [];
     categories.value = data.category_breakdown || [];
     period.value = data.period || { label: 'this month', updated_at: '' };
+    if (data?.period?.semester_id) {
+      selectedSemesterId.value = data.period.semester_id;
+    }
   } catch (error) {
     console.error(error);
     loadError.value = 'Unable to load financial trend right now.';
@@ -111,8 +169,20 @@ const loadTrend = async (manualRefresh = false) => {
 };
 
 onMounted(() => {
-  loadTrend();
+  periodType.value = isStudentProfile.value
+    ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly')
+    : 'monthly';
+  loadStudentSemesters().finally(() => loadTrend());
 });
+watch(
+  () => userStore.user?.profile_type,
+  (nextType) => {
+    if (nextType !== 'student' && periodType.value !== 'monthly') {
+      periodType.value = 'monthly';
+      selectedSemesterId.value = null;
+    }
+  },
+);
 </script>
 
 <template>
@@ -126,6 +196,34 @@ onMounted(() => {
             <p class="mt-2 text-sm text-slate-300">Performance trend for {{ period.label }}.</p>
           </div>
           <div class="flex items-center gap-3">
+            <div v-if="isStudentProfile" class="inline-flex h-10 items-center rounded-xl border border-white/20 bg-white/10 p-0.5 shadow-sm">
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'monthly' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'monthly'; loadTrend(true)"
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'semester' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'semester'; loadTrend(true)"
+              >
+                Semester
+              </button>
+            </div>
+            <select
+              v-if="isStudentProfile && periodType === 'semester'"
+              v-model.number="selectedSemesterId"
+              @change="loadTrend(true)"
+              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
+            >
+              <option v-for="semester in studentSemesters" :key="semester.id" :value="semester.id">
+                {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
+              </option>
+            </select>
             <button
               type="button"
               @click="loadTrend(true)"
@@ -246,6 +344,4 @@ onMounted(() => {
     </Teleport>
   </div>
 </template>
-
-
 

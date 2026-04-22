@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../../lib/axios';
 import { useUserStore } from '../../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm } from '../../lib/formatters.js';
@@ -51,8 +51,12 @@ interface DashboardInsights {
 }
 
 interface DashboardPeriod {
+  type?: 'monthly' | 'semester';
   label: string;
+  comparison_label?: string;
   updated_at: string;
+  month?: string;
+  semester_id?: number | null;
 }
 
 interface DashboardSummary {
@@ -70,6 +74,12 @@ interface BudgetAlertSummary {
   total_spent: number;
   warning_count: number;
   total_overspent: number;
+}
+interface StudentSemester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
 }
 
 const defaultOverview: DashboardOverview = {
@@ -96,12 +106,17 @@ const defaultPeriod: DashboardPeriod = {
 };
 
 const userStore = useUserStore();
+const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
 const isInitialLoading = ref(false);
 const isRefreshing = ref(false);
 const isBudgetAlertLoading = ref(false);
 const loadError = ref('');
 const summary = ref<DashboardSummary | null>(null);
 const budgetAlertSummary = ref<BudgetAlertSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
+const periodType = ref<'monthly' | 'semester'>('monthly');
+const selectedMonth = ref(malaysiaCurrentMonthYm());
+const studentSemesters = ref<StudentSemester[]>([]);
+const selectedSemesterId = ref<number | null>(null);
 
 const overview = computed<DashboardOverview>(() => summary.value?.overview ?? defaultOverview);
 const accounts = computed<DashboardAccount[]>(() => summary.value?.accounts ?? []);
@@ -110,16 +125,58 @@ const categories = computed<DashboardCategoryItem[]>(() => summary.value?.catego
 const recent = computed<DashboardRecentItem[]>(() => summary.value?.recent_transactions ?? []);
 const insights = computed<DashboardInsights>(() => summary.value?.insights ?? defaultInsights);
 const period = computed<DashboardPeriod>(() => summary.value?.period ?? defaultPeriod);
+const periodMetricLabel = computed(() => periodType.value === 'semester' ? 'Semester' : 'Monthly');
+const hasSemesters = computed(() => studentSemesters.value.length > 0);
+const showNoSemesterAlert = computed(() => isStudentProfile.value && !hasSemesters.value);
+const showNoSemesterSelected = computed(() => isStudentProfile.value && periodType.value === 'semester' && !hasSemesters.value);
 const trendPreview = computed<DashboardTrendItem[]>(() => trend.value.slice(-3));
 const topCategoriesPreview = computed<DashboardCategoryItem[]>(() => categories.value.slice(0, 3));
 const recentPreview = computed<DashboardRecentItem[]>(() => recent.value.slice(0, 5));
 
 const money = (value = 0) => formatCurrencyMYR(value);
 const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
+const longDate = (value = '') => {
+  if (!value) return '-';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed);
+};
 
 const change = (value = 0) => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 const currentMonth = () => {
   return malaysiaCurrentMonthYm();
+};
+const buildPeriodParams = () => {
+  const params: Record<string, string | number> = {
+    period: periodType.value,
+    month: selectedMonth.value,
+  };
+  if (periodType.value === 'semester' && selectedSemesterId.value) {
+    params.semester_id = selectedSemesterId.value;
+  }
+  return params;
+};
+
+const loadStudentSemesters = async () => {
+  if (!isStudentProfile.value) {
+    studentSemesters.value = [];
+    selectedSemesterId.value = null;
+    return;
+  }
+
+  try {
+    const { data } = await axiosInstance.get('/student-semesters');
+    studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
+    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
+      selectedSemesterId.value = studentSemesters.value[0].id;
+    }
+  } catch (error) {
+    console.error(error);
+  }
 };
 
 const loadDashboard = async (manualRefresh = false) => {
@@ -127,8 +184,11 @@ const loadDashboard = async (manualRefresh = false) => {
   else if (!summary.value) isInitialLoading.value = true;
   loadError.value = '';
   try {
-    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary');
+    const { data } = await axiosInstance.get<DashboardSummary>('/dashboard/summary', { params: buildPeriodParams() });
     summary.value = data;
+    if (data?.period?.semester_id) {
+      selectedSemesterId.value = data.period.semester_id;
+    }
   } catch (error) {
     console.error(error);
     loadError.value = 'Unable to load dashboard data right now.';
@@ -141,7 +201,9 @@ const loadDashboard = async (manualRefresh = false) => {
 const loadBudgetAlerts = async () => {
   isBudgetAlertLoading.value = true;
   try {
-    const { data } = await axiosInstance.get('/budgets', { params: { month: currentMonth(), only_budgeted: 1 } });
+    const { data } = await axiosInstance.get('/budgets', {
+      params: { ...buildPeriodParams(), month: selectedMonth.value || currentMonth(), only_budgeted: 1 },
+    });
     budgetAlertSummary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
   } catch (error) {
     console.error(error);
@@ -155,9 +217,25 @@ const refreshAll = async () => {
 };
 
 onMounted(() => {
-  loadDashboard();
-  loadBudgetAlerts();
+  selectedMonth.value = currentMonth();
+  periodType.value = isStudentProfile.value
+    ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly')
+    : 'monthly';
+  loadStudentSemesters().finally(() => {
+    loadDashboard();
+    loadBudgetAlerts();
+  });
 });
+
+watch(
+  () => userStore.user?.profile_type,
+  (nextType) => {
+    if (nextType !== 'student' && periodType.value !== 'monthly') {
+      periodType.value = 'monthly';
+      selectedSemesterId.value = null;
+    }
+  },
+);
 </script>
 
 <template>
@@ -172,6 +250,40 @@ onMounted(() => {
               'this month' }}.</p>
           </div>
           <div class="flex items-center gap-3">
+            <div v-if="isStudentProfile" class="inline-flex h-10 items-center rounded-xl border border-white/20 bg-white/10 p-0.5 shadow-sm">
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'monthly' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'monthly'; refreshAll()"
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
+                :class="periodType === 'semester' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'semester'; refreshAll()"
+              >
+                Semester
+              </button>
+            </div>
+            <select
+              v-if="isStudentProfile && periodType === 'semester' && hasSemesters"
+              v-model.number="selectedSemesterId"
+              @change="refreshAll"
+              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
+            >
+                <option v-for="semester in studentSemesters" :key="semester.id" :value="semester.id">
+                  {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
+                </option>
+              </select>
+            <div
+              v-if="showNoSemesterSelected"
+              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white inline-flex items-center"
+            >
+              No semester selected
+            </div>
             <button
               type="button"
               @click="refreshAll"
@@ -187,6 +299,14 @@ onMounted(() => {
         </div>
         <div v-if="loadError" class="mt-6 rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-100">{{ loadError }}</div>
         <RouterLink
+          v-if="showNoSemesterAlert"
+          to="/settings/semesters"
+          class="mt-4 block rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <p class="font-medium">No semester selected.</p>
+          <p class="mt-1 text-amber-800">Create your semester period in Settings to enable semester-based view.</p>
+        </RouterLink>
+        <RouterLink
           v-if="!isBudgetAlertLoading && budgetAlertSummary.warning_count > 0"
           to="/budgets"
           class="mt-4 block rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 hover:bg-amber-100"
@@ -201,14 +321,14 @@ onMounted(() => {
             <p class="mt-2 text-xs text-slate-400">{{ overview.account_count ?? 0 }} accounts</p>
           </article>
           <article class="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <p class="text-sm text-slate-300">Monthly Income</p>
+            <p class="text-sm text-slate-300">{{ periodMetricLabel }} Income</p>
             <p class="mt-3 text-2xl font-semibold">{{ money(overview.monthly_income) }}</p>
-            <p class="mt-2 text-xs text-emerald-300">{{ change(overview.income_change_pct) }} vs last month</p>
+            <p class="mt-2 text-xs text-emerald-300">{{ change(overview.income_change_pct) }} {{ period.comparison_label || 'vs last month' }}</p>
           </article>
           <article class="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <p class="text-sm text-slate-300">Monthly Expense</p>
+            <p class="text-sm text-slate-300">{{ periodMetricLabel }} Expense</p>
             <p class="mt-3 text-2xl font-semibold">{{ money(overview.monthly_expense) }}</p>
-            <p class="mt-2 text-xs text-amber-300">{{ change(overview.expense_change_pct) }} vs last month</p>
+            <p class="mt-2 text-xs text-amber-300">{{ change(overview.expense_change_pct) }} {{ period.comparison_label || 'vs last month' }}</p>
           </article>
           <article class="rounded-3xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-slate-300">Savings Rate</p>
@@ -256,7 +376,7 @@ onMounted(() => {
           </div>
           <div class="mt-5 grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 p-4">
-              <p class="text-sm text-slate-500">Transactions this month</p>
+              <p class="text-sm text-slate-500">Transactions this period</p>
               <p class="mt-2 text-xl font-semibold text-slate-900">{{ insights.transactions_this_month ?? 0 }}</p>
             </div>
             <div class="rounded-2xl border border-slate-200 p-4">
@@ -330,6 +450,3 @@ onMounted(() => {
     </Teleport>
   </div>
 </template>
-
-
-

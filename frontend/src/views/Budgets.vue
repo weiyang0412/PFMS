@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axiosInstance from '../lib/axios';
 import { useToast } from '../composables/useToast.js';
+import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, malaysiaCurrentMonthYm } from '../lib/formatters.js';
 
 interface BudgetItem {
@@ -15,6 +16,7 @@ interface BudgetItem {
   remaining: number | null;
   usage_pct: number;
   alert_level: 'none' | 'safe' | 'warning' | 'over';
+  can_edit?: boolean;
 }
 
 interface BudgetSummary {
@@ -23,8 +25,17 @@ interface BudgetSummary {
   warning_count: number;
   total_overspent: number;
 }
+interface StudentSemester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
 
 const month = ref(malaysiaCurrentMonthYm());
+const periodType = ref<'monthly' | 'semester'>('monthly');
+const studentSemesters = ref<StudentSemester[]>([]);
+const selectedSemesterId = ref<number | null>(null);
 const items = ref<BudgetItem[]>([]);
 const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const isLoading = ref(false);
@@ -35,6 +46,8 @@ const deletingCategoryIds = ref<number[]>([]);
 const toast = useToast();
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
+const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
 const storedThreshold = Number(localStorage.getItem('budget_default_threshold') || 80);
 const defaultAlertThreshold = ref(Number.isFinite(storedThreshold) && storedThreshold >= 1 && storedThreshold <= 100 ? storedThreshold : 80);
 
@@ -42,8 +55,47 @@ const isValidMonth = (value: string) => /^\d{4}-\d{2}$/.test(value);
 if (typeof route.query.month === 'string' && isValidMonth(route.query.month)) {
   month.value = route.query.month;
 }
+if (typeof route.query.period === 'string' && ['monthly', 'semester'].includes(route.query.period)) {
+  periodType.value = route.query.period as 'monthly' | 'semester';
+}
+if (typeof route.query.semester_id === 'string' && Number(route.query.semester_id) > 0) {
+  selectedSemesterId.value = Number(route.query.semester_id);
+}
 
 const formatMoney = (value = 0) => formatCurrencyMYR(value);
+const longDate = (value = '') => {
+  if (!value) return '-';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed);
+};
+const sortedSemesters = computed(() =>
+  [...studentSemesters.value].sort((a, b) => {
+    const aTime = new Date(`${a.start_date}T00:00:00`).getTime();
+    const bTime = new Date(`${b.start_date}T00:00:00`).getTime();
+    return aTime - bTime;
+  }),
+);
+const selectedSemesterIndex = computed(() =>
+  sortedSemesters.value.findIndex((semester) => semester.id === selectedSemesterId.value),
+);
+const selectedSemesterLabel = computed(() => {
+  const semester = sortedSemesters.value.find((item) => item.id === selectedSemesterId.value);
+  if (!semester) return 'No semester selected';
+  return `${semester.name} (${longDate(semester.start_date)} to ${longDate(semester.end_date)})`;
+});
+const canShiftPrev = computed(() => {
+  if (periodType.value !== 'semester') return true;
+  return selectedSemesterIndex.value > 0;
+});
+const canShiftNext = computed(() => {
+  if (periodType.value !== 'semester') return true;
+  return selectedSemesterIndex.value >= 0 && selectedSemesterIndex.value < sortedSemesters.value.length - 1;
+});
 
 const isSaving = (categoryId: number) => savingCategoryIds.value.includes(categoryId);
 const isDeleting = (categoryId: number) => deletingCategoryIds.value.includes(categoryId);
@@ -59,9 +111,21 @@ const setBusy = (type: 'save' | 'delete', categoryId: number, enabled: boolean) 
 const loadBudgets = async () => {
   isLoading.value = true;
   try {
-    const { data } = await axiosInstance.get('/budgets', { params: { month: month.value, default_threshold: defaultAlertThreshold.value } });
+    const params: Record<string, string | number> = {
+      month: month.value,
+      period: periodType.value,
+      default_threshold: defaultAlertThreshold.value,
+    };
+    if (periodType.value === 'semester' && selectedSemesterId.value) {
+      params.semester_id = selectedSemesterId.value;
+    }
+
+    const { data } = await axiosInstance.get('/budgets', { params });
     items.value = data.items || [];
     summary.value = data.summary || { total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 };
+    if (data?.range?.semester_id) {
+      selectedSemesterId.value = data.range.semester_id;
+    }
   } catch (error) {
     console.error(error);
     toast.show('Unable to load budgets right now.', 'danger');
@@ -72,6 +136,7 @@ const loadBudgets = async () => {
 };
 
 const saveBudget = async (item: BudgetItem) => {
+  if (!item.can_edit) return;
   setBusy('save', item.category_id, true);
   try {
     const amount = Number(item.amount ?? 0);
@@ -97,6 +162,7 @@ const saveBudget = async (item: BudgetItem) => {
 };
 
 const clearBudget = async (item: BudgetItem) => {
+  if (!item.can_edit) return;
   if (!item.budget_id) return;
   setBusy('delete', item.category_id, true);
   try {
@@ -119,6 +185,7 @@ const focusedCategoryId = computed(() => {
 });
 
 const copyPreviousMonth = async () => {
+  if (periodType.value === 'semester') return;
   isCopying.value = true;
   try {
     const { data } = await axiosInstance.post('/budgets/copy-previous-month', { month: month.value });
@@ -132,6 +199,23 @@ const copyPreviousMonth = async () => {
     isCopying.value = false;
   }
 };
+const loadStudentSemesters = async () => {
+  if (!isStudentProfile.value) {
+    studentSemesters.value = [];
+    selectedSemesterId.value = null;
+    return;
+  }
+
+  try {
+    const { data } = await axiosInstance.get('/student-semesters');
+    studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
+    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
+      selectedSemesterId.value = studentSemesters.value[0].id;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const clearFocus = () => {
   const nextQuery = { ...route.query };
@@ -139,7 +223,17 @@ const clearFocus = () => {
   router.replace({ query: nextQuery });
 };
 
-const shiftMonth = (offset: number) => {
+const shiftPeriod = (offset: number) => {
+  if (periodType.value === 'semester') {
+    if (!sortedSemesters.value.length) return;
+    const currentIndex = selectedSemesterIndex.value;
+    if (currentIndex < 0) return;
+    const nextIndex = currentIndex + offset;
+    if (nextIndex < 0 || nextIndex >= sortedSemesters.value.length) return;
+    selectedSemesterId.value = sortedSemesters.value[nextIndex].id;
+    return;
+  }
+
   const [year, monthPart] = month.value.split('-').map(Number);
   if (!year || !monthPart) return;
   const nextDate = new Date(year, monthPart - 1 + offset, 1);
@@ -157,7 +251,10 @@ const showFullScreenLoading = computed(() => isLoading.value && !hasLoaded.value
 const showTableSkeleton = computed(() => isLoading.value && hasLoaded.value);
 
 onMounted(() => {
-  loadBudgets();
+  periodType.value = isStudentProfile.value
+    ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || periodType.value)
+    : 'monthly';
+  loadStudentSemesters().finally(() => loadBudgets());
 });
 
 watch(
@@ -173,8 +270,36 @@ watch(
 watch(
   () => month.value,
   (nextMonth) => {
-    const nextQuery = { ...route.query, month: nextMonth };
+    const nextQuery: Record<string, any> = { ...route.query, month: nextMonth, period: periodType.value };
+    if (periodType.value === 'semester' && selectedSemesterId.value) {
+      nextQuery.semester_id = String(selectedSemesterId.value);
+    } else {
+      delete nextQuery.semester_id;
+    }
     router.replace({ query: nextQuery });
+  },
+);
+watch(
+  () => periodType.value,
+  () => {
+    loadBudgets();
+  },
+);
+watch(
+  () => selectedSemesterId.value,
+  () => {
+    if (periodType.value === 'semester') {
+      loadBudgets();
+    }
+  },
+);
+watch(
+  () => userStore.user?.profile_type,
+  (nextType) => {
+    if (nextType !== 'student' && periodType.value !== 'monthly') {
+      periodType.value = 'monthly';
+      selectedSemesterId.value = null;
+    }
   },
 );
 
@@ -191,12 +316,34 @@ watch(
             <p class="mt-2 text-sm text-slate-300">Set monthly category budgets and get warning alerts before overspending.</p>
           </div>
           <div class="flex flex-wrap items-center gap-3">
+            <div v-if="isStudentProfile" class="inline-flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
+              <button
+                type="button"
+                class="h-10 rounded-lg px-3 text-sm font-medium transition"
+                :class="periodType === 'monthly' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'monthly'; selectedSemesterId = null"
+              >
+                Monthly
+              </button>
+              <button
+                v-if="isStudentProfile"
+                type="button"
+                class="h-10 rounded-lg px-3 text-sm font-medium transition"
+                :class="periodType === 'semester' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
+                @click="periodType = 'semester'"
+              >
+                Semester
+              </button>
+            </div>
             <div class="inline-flex items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
-              <button type="button" @click="shiftMonth(-1)" class="rounded-md px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/15">
+              <button type="button" @click="shiftPeriod(-1)" :disabled="!canShiftPrev" class="h-10 rounded-md px-3 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed">
                 Prev
               </button>
-              <input v-model="month" type="month" class="mx-1 rounded-md border border-white/20 bg-slate-900/50 px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500/40" />
-              <button type="button" @click="shiftMonth(1)" class="rounded-md px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/15">
+              <input v-if="periodType === 'monthly'" v-model="month" type="month" class="mx-1 h-10 rounded-md border border-white/20 bg-slate-900/50 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/40" />
+              <div v-else class="mx-1 flex h-10 min-w-[280px] items-center rounded-md border border-white/20 bg-slate-900/50 px-3 text-sm text-white">
+                {{ selectedSemesterLabel }}
+              </div>
+              <button type="button" @click="shiftPeriod(1)" :disabled="!canShiftNext" class="h-10 rounded-md px-3 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed">
                 Next
               </button>
             </div>
@@ -205,7 +352,7 @@ watch(
                 <span class="text-xs text-slate-300">Default Alert %</span>
                 <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-white/20 bg-slate-900/70 px-2 py-1 text-sm text-white" @change="persistDefaultThreshold" />
               </div>
-              <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying" class="rounded-md px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-60">
+              <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying || periodType === 'semester'" class="rounded-md px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-60">
                 {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
               </button>
               <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-lg border border-white/15 bg-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/25 disabled:opacity-60">
@@ -308,13 +455,13 @@ watch(
                 </td>
                 <td class="px-4 py-4">
                   <div class="flex gap-2">
-                    <RouterLink :to="{ path: '/transactions', query: { category: item.category } }" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <RouterLink :to="{ path: '/transactions', query: { category: item.category, month, period: periodType, semester_id: periodType === 'semester' ? selectedSemesterId : undefined } }" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
                       View Txns
                     </RouterLink>
-                    <button type="button" @click="saveBudget(item)" :disabled="isSaving(item.category_id) || isDeleting(item.category_id)" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+                    <button type="button" @click="saveBudget(item)" :disabled="!item.can_edit || isSaving(item.category_id) || isDeleting(item.category_id)" class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">
                       {{ isSaving(item.category_id) ? 'Saving...' : 'Save' }}
                     </button>
-                    <button type="button" @click="clearBudget(item)" :disabled="!item.budget_id || isDeleting(item.category_id) || isSaving(item.category_id)" class="rounded-md border border-red-700 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
+                    <button type="button" @click="clearBudget(item)" :disabled="!item.can_edit || !item.budget_id || isDeleting(item.category_id) || isSaving(item.category_id)" class="rounded-md border border-red-700 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
                       {{ isDeleting(item.category_id) ? 'Removing...' : 'Clear' }}
                     </button>
                   </div>
@@ -342,6 +489,3 @@ watch(
     </div>
   </div>
 </template>
-
-
-

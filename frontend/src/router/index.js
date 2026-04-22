@@ -6,6 +6,8 @@ import Dashboard from '../views/auth/Dashboard.vue'
 import Accounts from '../views/Accounts.vue'
 import Transactions from '../views/Transactions.vue'
 import TransactionOptions from '../views/TransactionOptions.vue'
+import SettingsProfile from '../views/SettingsProfile.vue'
+import SettingsSemesters from '../views/SettingsSemesters.vue'
 import Budgets from '../views/Budgets.vue'
 import FinancialTrend from '../views/FinancialTrend.vue'
 import FinancialSummary from '../views/FinancialSummary.vue'
@@ -51,10 +53,26 @@ const router = createRouter({
             meta: { requiresAuth: true },
         },
         {
-            path: "/transaction-options",
-            name: "transaction-options",
+            path: "/settings/profile",
+            name: "settings-profile",
+            component: SettingsProfile,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/settings/semesters",
+            name: "settings-semesters",
+            component: SettingsSemesters,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/settings/options",
+            name: "settings-options",
             component: TransactionOptions,
             meta: { requiresAuth: true },
+        },
+        {
+            path: "/transaction-options",
+            redirect: "/settings/options",
         },
         {
             path: "/budgets",

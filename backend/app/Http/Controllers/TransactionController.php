@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\StudentSemester;
 use App\Models\Transaction;
 use App\Models\TransactionCategory;
 use Carbon\Carbon;
@@ -15,13 +16,14 @@ class TransactionController extends Controller
     {
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
-        $month = $request->query('month');
-
-        if ($month !== null && !preg_match('/^\d{4}-\d{2}$/', (string) $month)) {
-            return response()->json([
-                'message' => 'Invalid month format. Use YYYY-MM.',
-            ], 422);
-        }
+        $month = $this->resolveMonth($request->query('month'));
+        $period = $this->resolvePeriod($request->query('period'), $request->user()->profile_type);
+        $selectedSemester = $period === 'semester'
+            ? $this->resolveStudentSemester($request, $month)
+            : null;
+        [$periodStart, $periodEnd] = $period === 'semester'
+            ? $this->semesterRange($selectedSemester, $month)
+            : $this->monthRange($month);
 
         $query = $request->user()
             ->transactions()
@@ -30,11 +32,7 @@ class TransactionController extends Controller
             ->orderByDesc('created_at')
             ->orderByDesc('id');
 
-        if ($month) {
-            $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
-            $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
-            $query->whereBetween('transaction_date', [$monthStart, $monthEnd]);
-        }
+        $query->whereBetween('transaction_date', [$periodStart->toDateString(), $periodEnd->toDateString()]);
 
         $transactions = $query->paginate($perPage, ['*'], 'page', $page);
         $transactions->through(function ($transaction) {
@@ -51,6 +49,18 @@ class TransactionController extends Controller
                 'updated_at' => $transaction->updated_at,
             ];
         });
+        $transactions->appends([
+            'month' => $month,
+            'period' => $period,
+            'semester_id' => $selectedSemester ? $selectedSemester->id : null,
+        ]);
+        $transactions->setCollection(
+            $transactions->getCollection()
+                ->map(fn ($item) => array_merge($item, [
+                    'period_type' => $period,
+                    'semester_id' => $selectedSemester ? $selectedSemester->id : null,
+                ]))
+        );
 
         return response()->json($transactions);
     }
@@ -137,5 +147,77 @@ class TransactionController extends Controller
         foreach (['income', 'expense'] as $typeName) {
             $request->user()->transactionTypes()->create(['name' => $typeName]);
         }
+    }
+
+    private function resolveMonth(?string $input): string
+    {
+        if ($input !== null && !preg_match('/^\d{4}-\d{2}$/', (string) $input)) {
+            throw ValidationException::withMessages([
+                'month' => ['Invalid month format. Use YYYY-MM.'],
+            ]);
+        }
+
+        try {
+            if ($input) {
+                return Carbon::createFromFormat('Y-m', $input)->format('Y-m');
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return now()->format('Y-m');
+    }
+
+    private function resolvePeriod(?string $input, ?string $profileType): string
+    {
+        if ($profileType !== 'student') {
+            return 'monthly';
+        }
+
+        return in_array($input, ['monthly', 'semester'], true) ? $input : 'monthly';
+    }
+
+    private function monthRange(string $month): array
+    {
+        $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->startOfDay();
+        $end = $start->copy()->endOfMonth()->endOfDay();
+        return [$start, $end];
+    }
+
+    private function semesterRange(?StudentSemester $semester, string $month): array
+    {
+        if ($semester) {
+            return [
+                Carbon::parse($semester->start_date)->startOfDay(),
+                Carbon::parse($semester->end_date)->endOfDay(),
+            ];
+        }
+
+        return $this->monthRange($month);
+    }
+
+    private function resolveStudentSemester(Request $request, string $month): ?StudentSemester
+    {
+        $semesterId = (int) $request->query('semester_id');
+        if ($semesterId > 0) {
+            return $request->user()->studentSemesters()->whereKey($semesterId)->first();
+        }
+
+        $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
+        $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
+
+        $active = $request->user()->studentSemesters()
+            ->whereDate('start_date', '<=', $monthEnd)
+            ->whereDate('end_date', '>=', $monthStart)
+            ->orderBy('start_date')
+            ->first();
+
+        if ($active) {
+            return $active;
+        }
+
+        return $request->user()->studentSemesters()
+            ->orderByDesc('end_date')
+            ->orderByDesc('id')
+            ->first();
     }
 }

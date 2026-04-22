@@ -1,5 +1,10 @@
 /**
- * @typedef {{ name: string; email: string }} User
+ * @typedef {{
+ *  name: string;
+ *  email: string;
+ *  profile_type?: 'student' | 'general';
+ *  preferred_period?: 'monthly' | 'semester';
+ * }} User
  */
 import { defineStore } from 'pinia'
 import axiosInstance from '@/lib/axios'
@@ -44,6 +49,14 @@ export const useUserStore = defineStore('user', {
             } catch (error) {
                 console.error(error)
             }
+        },
+
+        async updatePreferences(payload) {
+            const res = await axiosInstance.patch('/user/preferences', payload)
+            this.user = res.data
+            this.isAuthenticated = true
+            this.authChecked = true
+            return res.data
         },
     },
 })
