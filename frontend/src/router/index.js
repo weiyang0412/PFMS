@@ -8,6 +8,7 @@ import Transactions from '../views/Transactions.vue'
 import TransactionOptions from '../views/TransactionOptions.vue'
 import SettingsProfile from '../views/SettingsProfile.vue'
 import SettingsSemesters from '../views/SettingsSemesters.vue'
+import SettingsReminders from '../views/SettingsReminders.vue'
 import Budgets from '../views/Budgets.vue'
 import FinancialTrend from '../views/FinancialTrend.vue'
 import FinancialSummary from '../views/FinancialSummary.vue'
@@ -68,6 +69,12 @@ const router = createRouter({
             path: "/settings/options",
             name: "settings-options",
             component: TransactionOptions,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/settings/reminders",
+            name: "settings-reminders",
+            component: SettingsReminders,
             meta: { requiresAuth: true },
         },
         {

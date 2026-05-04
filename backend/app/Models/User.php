@@ -14,6 +14,7 @@ use App\Models\Transaction;
 use App\Models\TransactionType;
 use App\Models\Budget;
 use App\Models\StudentSemester;
+use App\Models\NotificationPreference;
 
 class User extends Authenticatable
 {
@@ -85,5 +86,10 @@ class User extends Authenticatable
     public function studentSemesters(): HasMany
     {
         return $this->hasMany(StudentSemester::class);
+    }
+
+    public function notificationPreferences()
+    {
+        return $this->hasOne(NotificationPreference::class);
     }
 }

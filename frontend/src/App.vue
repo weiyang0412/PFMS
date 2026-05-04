@@ -231,6 +231,12 @@ onMounted(() => {
               >
                 Manage Options
               </RouterLink>
+              <RouterLink
+                to="/settings/reminders"
+                :class="settingsChildClasses(route.name === 'settings-reminders')"
+              >
+                Reminders & Reports
+              </RouterLink>
             </div>
           </li>
         </ul>
@@ -324,4 +330,3 @@ onMounted(() => {
     <ToastContainer />
   </div>
 </template>
-
