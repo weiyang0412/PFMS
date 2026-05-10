@@ -188,6 +188,25 @@ const topBudgetAlerts = computed(() =>
     .sort((a, b) => Number(b.usage_pct) - Number(a.usage_pct))
     .slice(0, 3),
 );
+const sortedSemesters = computed(() =>
+  [...semesters.value].sort((a, b) => {
+    const aTime = new Date(`${a.start_date}T00:00:00`).getTime();
+    const bTime = new Date(`${b.start_date}T00:00:00`).getTime();
+    return aTime - bTime;
+  }),
+);
+const semesterMatchesMonth = (semester: StudentSemester, monthYm: string) => {
+  if (!monthYm || !/^\d{4}-\d{2}$/.test(monthYm)) return false;
+  const [year, month] = monthYm.split('-').map(Number);
+  if (!year || !month) return false;
+
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0));
+  const start = new Date(`${semester.start_date}T00:00:00`);
+  const end = new Date(`${semester.end_date}T23:59:59`);
+  return start <= monthEnd && end >= monthStart;
+};
+const semesterForMonth = (monthYm: string) => semesters.value.find((semester) => semesterMatchesMonth(semester, monthYm))?.id ?? null;
 
 const loadTransactions = async (page = 1) => {
   isLoading.value = true;
@@ -239,8 +258,8 @@ const loadSemesters = async () => {
   try {
     const { data } = await axiosInstance.get('/student-semesters');
     semesters.value = Array.isArray(data?.items) ? data.items : [];
-    if (!selectedSemesterId.value && semesters.value.length > 0) {
-      selectedSemesterId.value = semesters.value[0].id;
+    if (selectedPeriod.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(monthFilter.value || currentMonth());
     }
   } catch (error) {
     console.error(error);
@@ -311,6 +330,9 @@ const goToPage = (page: number) => { if (page >= 1 && page <= totalPages.value) 
 const nextPage = () => { if (currentPage.value < totalPages.value) goToPage(currentPage.value + 1); };
 const prevPage = () => { if (currentPage.value > 1) goToPage(currentPage.value - 1); };
 const handleMonthFilterChange = () => {
+  if (selectedPeriod.value === 'semester') {
+    selectedSemesterId.value = semesterForMonth(monthFilter.value || currentMonth());
+  }
   loadTransactions(1);
   loadBudgetSnapshot();
 };
@@ -326,6 +348,9 @@ onMounted(async () => {
     categoryFilter.value = route.query.category.trim();
   }
   await loadSemesters();
+  if (selectedPeriod.value === 'semester') {
+    selectedSemesterId.value = semesterForMonth(monthFilter.value || currentMonth());
+  }
   await Promise.all([loadTransactions(), loadOptions(), loadBudgetSnapshot()]);
   if (!form.transaction_type_id) form.transaction_type_id = defaultTypeId();
 });
@@ -334,6 +359,9 @@ watch(
   (nextType) => {
     if (nextType === 'student') {
       loadSemesters().then(() => {
+        if (selectedPeriod.value === 'semester') {
+          selectedSemesterId.value = semesterForMonth(monthFilter.value || currentMonth());
+        }
         loadTransactions(1);
         loadBudgetSnapshot();
       });
@@ -350,6 +378,15 @@ watch(
     if (isStudentProfile.value) {
       loadTransactions(1);
       loadBudgetSnapshot();
+    }
+  },
+);
+
+watch(
+  () => monthFilter.value,
+  (nextMonth) => {
+    if (selectedPeriod.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(nextMonth || currentMonth());
     }
   },
 );
@@ -502,7 +539,7 @@ watch(
                 class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10"
               >
                 <option v-if="!semesters.length" :value="null" disabled>No semester selected</option>
-                <option v-for="semester in semesters" :key="semester.id" :value="semester.id">
+                <option v-for="semester in sortedSemesters" :key="semester.id" :value="semester.id">
                   {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
                 </option>
               </select>

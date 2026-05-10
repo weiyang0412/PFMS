@@ -202,17 +202,17 @@ class TransactionController extends Controller
             return $request->user()->studentSemesters()->whereKey($semesterId)->first();
         }
 
-        $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
-        $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
+        $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
 
-        $active = $request->user()->studentSemesters()
-            ->whereDate('start_date', '<=', $monthEnd)
-            ->whereDate('end_date', '>=', $monthStart)
+        $matchedSemester = $request->user()->studentSemesters()
+            ->whereDate('start_date', '<=', $monthEnd->toDateString())
+            ->whereDate('end_date', '>=', $monthStart->toDateString())
             ->orderBy('start_date')
             ->first();
 
-        if ($active) {
-            return $active;
+        if ($matchedSemester) {
+            return $matchedSemester;
         }
 
         return $request->user()->studentSemesters()

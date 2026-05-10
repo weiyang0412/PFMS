@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notification-preferences', [NotificationPreferenceController::class, 'show']);
     Route::patch('/notification-preferences', [NotificationPreferenceController::class, 'update']);
     Route::post('/notification-preferences/send-test-report', [NotificationPreferenceController::class, 'sendTestReport']);
+    Route::post('/notification-preferences/send-test-budget-alert', [NotificationPreferenceController::class, 'sendTestBudgetAlert']);
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 
@@ -61,6 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/student-semesters', [StudentSemesterController::class, 'index']);
     Route::post('/student-semesters', [StudentSemesterController::class, 'store']);
+    Route::post('/student-semesters/copy-previous', [StudentSemesterController::class, 'copyPreviousSemester']);
     Route::patch('/student-semesters/{studentSemester}', [StudentSemesterController::class, 'update']);
     Route::delete('/student-semesters/{studentSemester}', [StudentSemesterController::class, 'destroy']);
 });

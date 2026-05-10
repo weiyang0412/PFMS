@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import axiosInstance from '../lib/axios';
+import { useToast } from '../composables/useToast';
 import { useUserStore } from '../stores/userStore';
 
 type SemesterModalMode = 'add' | 'edit' | 'view';
@@ -10,13 +11,18 @@ interface StudentSemester {
   name: string;
   start_date: string;
   end_date: string;
+  status?: 'current' | 'upcoming' | 'inactive';
+  is_current?: boolean;
+  duration_days?: number | null;
 }
 
 const userStore = useUserStore();
+const toast = useToast();
 const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
 const semesters = ref<StudentSemester[]>([]);
 const isSemestersLoading = ref(false);
 const isSemesterSaving = ref(false);
+const isCopyingSemester = ref(false);
 const deletingSemesterId = ref<number | null>(null);
 const semesterError = ref('');
 const modalMode = ref<SemesterModalMode>('add');
@@ -29,8 +35,47 @@ const semesterForm = reactive({
   end_date: '',
 });
 const showLoadingOverlay = computed(
-  () => isSemestersLoading.value || isSemesterSaving.value || deletingSemesterId.value !== null,
+  () => isSemestersLoading.value || isSemesterSaving.value || deletingSemesterId.value !== null || isCopyingSemester.value,
 );
+
+const loadingLabel = computed(() => {
+  if (isSemestersLoading.value) return 'Loading...';
+  if (isSemesterSaving.value) return 'Saving...';
+  if (isCopyingSemester.value) return 'Copying...';
+  if (deletingSemesterId.value !== null) return 'Deleting...';
+  return 'Loading...';
+});
+
+const sortedSemesters = computed(() => [...semesters.value].sort((a, b) => {
+  const startDiff = String(a.start_date || '').localeCompare(String(b.start_date || ''));
+  if (startDiff !== 0) return startDiff;
+  return (a.id || 0) - (b.id || 0);
+}));
+
+const semesterStatusLabel = (value: StudentSemester['status']) => {
+  if (value === 'current') return 'Current';
+  if (value === 'upcoming') return 'Upcoming';
+  return 'Inactive';
+};
+
+const semesterStatusClass = (value: StudentSemester['status']) => {
+  if (value === 'current') return 'bg-emerald-100 text-emerald-700';
+  if (value === 'upcoming') return 'bg-amber-100 text-amber-700';
+  return 'bg-slate-100 text-slate-600';
+};
+
+const formatSemesterDate = (value: string) => {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return value;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+};
 
 const loadSemesters = async () => {
   if (!isStudentProfile.value) {
@@ -67,6 +112,22 @@ const openAddModal = () => {
   selectedSemester.value = null;
   resetSemesterForm();
   showModal.value = true;
+};
+
+const openCopyPrevious = async () => {
+  if (!isStudentProfile.value) return;
+  isCopyingSemester.value = true;
+  semesterError.value = '';
+  try {
+    await axiosInstance.post('/student-semesters/copy-previous');
+    await loadSemesters();
+    toast.show('Previous semester copied.', 'success');
+  } catch (error: any) {
+    console.error(error);
+    semesterError.value = error?.response?.data?.message || 'Unable to copy previous semester.';
+  } finally {
+    isCopyingSemester.value = false;
+  }
 };
 
 const openViewModal = (item: StudentSemester) => {
@@ -149,43 +210,64 @@ onMounted(() => {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="text-sm uppercase tracking-[0.3em] text-slate-400">Settings</p>
-            <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Manage Semester</h1>
-            <p class="mt-2 text-sm text-slate-300">Create and maintain your semester date ranges manually.</p>
+            <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Semester Setup</h1>
+            <p class="mt-2 text-sm text-slate-300">Create and maintain your semester date ranges, and reuse the latest one when needed.</p>
           </div>
-          <button
-            v-if="isStudentProfile"
-            type="button"
-            @click="openAddModal"
-            class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20"
-          >
-            Add Semester
-          </button>
+          <div v-if="isStudentProfile" class="flex flex-wrap gap-3">
+            <button
+              type="button"
+              @click="openCopyPrevious"
+              :disabled="isCopyingSemester || isSemestersLoading || !semesters.length"
+              class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Copy Previous Semester
+            </button>
+            <button
+              type="button"
+              @click="openAddModal"
+              class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20"
+            >
+              Add Semester
+            </button>
+          </div>
         </div>
       </section>
 
       <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
         <div v-if="!isStudentProfile" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Semester management is available for Student profile only.
+          Semester setup is available for Student profile only.
         </div>
         <template v-else>
-          <div v-if="!isSemestersLoading && !semesters.length" class="text-sm text-slate-500">
-            No semester record yet. Click Add Semester to create one.
+          <div v-if="!isSemestersLoading && !sortedSemesters.length" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+            <p class="font-medium text-slate-900">No semester record yet.</p>
+            <p class="mt-1">Create your first semester to enable semester-based views in dashboard, transactions, and reports.</p>
+            <button type="button" @click="openAddModal" class="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+              Add Semester
+            </button>
           </div>
           <div v-else class="overflow-x-auto">
             <table class="min-w-full border-collapse text-left">
               <thead class="border-b border-slate-200">
                 <tr class="text-sm text-slate-600">
                   <th class="px-4 py-3 font-medium">Name</th>
+                  <th class="px-4 py-3 font-medium">Status</th>
                   <th class="px-4 py-3 font-medium">Start Date</th>
                   <th class="px-4 py-3 font-medium">End Date</th>
                   <th class="w-44 px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in semesters" :key="item.id" class="border-b border-slate-100 text-sm">
-                  <td class="px-4 py-3 font-medium text-slate-900">{{ item.name }}</td>
-                  <td class="px-4 py-3 text-slate-700">{{ item.start_date }}</td>
-                  <td class="px-4 py-3 text-slate-700">{{ item.end_date }}</td>
+                <tr v-for="item in sortedSemesters" :key="item.id" class="border-b border-slate-100 text-sm" :class="item.is_current ? 'bg-emerald-50/40' : ''">
+                  <td class="px-4 py-3 font-medium text-slate-900">
+                    {{ item.name }}
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide" :class="semesterStatusClass(item.status)">
+                      {{ semesterStatusLabel(item.status) }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-slate-700">{{ formatSemesterDate(item.start_date) }}</td>
+                  <td class="px-4 py-3 text-slate-700">{{ formatSemesterDate(item.end_date) }}</td>
                   <td class="w-44 px-4 py-3">
                     <div class="flex gap-2">
                       <button type="button" @click="openViewModal(item)" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
@@ -214,9 +296,9 @@ onMounted(() => {
             <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <h2 class="text-xl font-semibold text-slate-900">{{ modalMode === 'add' ? 'Add Semester' : modalMode === 'edit' ? 'Edit Semester' : 'Semester Details' }}</h2>
-                <p class="text-sm text-slate-500">{{ modalMode === 'view' ? 'Review semester details.' : 'Fill details for the semester period.' }}</p>
+                <p class="text-sm text-slate-500">{{ modalMode === 'view' ? 'Review semester details.' : 'Enter a date range without overlapping existing semesters.' }}</p>
               </div>
-              <button type="button" @click="closeModal" class="text-slate-500 hover:text-slate-900">x</button>
+              <button type="button" @click="closeModal" class="text-slate-500 hover:text-slate-900">×</button>
             </div>
 
             <div v-if="modalMode === 'view'" class="space-y-4 px-6 py-6">
@@ -227,11 +309,11 @@ onMounted(() => {
                 </div>
                 <div>
                   <p class="text-sm font-medium text-slate-700">Start Date</p>
-                  <p class="mt-2 text-slate-900">{{ selectedSemester?.start_date }}</p>
+                  <p class="mt-2 text-slate-900">{{ formatSemesterDate(selectedSemester?.start_date || '') }}</p>
                 </div>
                 <div class="md:col-span-2">
                   <p class="text-sm font-medium text-slate-700">End Date</p>
-                  <p class="mt-2 text-slate-900">{{ selectedSemester?.end_date }}</p>
+                  <p class="mt-2 text-slate-900">{{ formatSemesterDate(selectedSemester?.end_date || '') }}</p>
                 </div>
               </div>
               <div class="flex justify-end">
@@ -275,7 +357,7 @@ onMounted(() => {
           <div class="modal-panel-animate relative z-[101] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div class="p-6">
               <h3 class="text-xl font-semibold text-slate-900">Delete this semester?</h3>
-              <p class="mt-2 text-sm text-slate-500">This action cannot be undone.</p>
+              <p class="mt-2 text-sm text-slate-500">This will remove the semester from semester-based views.</p>
               <div class="mt-6 flex justify-end gap-3">
                 <button type="button" @click="closeModal" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                   Cancel
@@ -298,7 +380,7 @@ onMounted(() => {
               <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
               <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
             </div>
-            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+            <p class="text-lg font-semibold text-slate-900">{{ loadingLabel }}</p>
           </div>
         </div>
       </Transition>

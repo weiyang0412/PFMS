@@ -43,7 +43,7 @@ const createType = async () => {
   optionErrors.type = '';
 
   if (!name) {
-    optionErrors.type = 'Type name is required.';
+    optionErrors.type = 'Please enter a type name.';
     return;
   }
 
@@ -53,9 +53,9 @@ const createType = async () => {
     await axiosInstance.post('/transaction-options/types', { name });
     newTypeName.value = '';
     await loadOptions();
-    toast.show('Type added successfully.', 'success');
+    toast.show('Type added.', 'success');
   } catch (error: any) {
-    optionErrors.type = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save type.';
+    optionErrors.type = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save this type.';
   } finally {
     isTypeSubmitting.value = false;
   }
@@ -66,7 +66,7 @@ const createCategory = async () => {
   optionErrors.category = '';
 
   if (!name) {
-    optionErrors.category = 'Category name is required.';
+    optionErrors.category = 'Please enter a category name.';
     return;
   }
 
@@ -80,9 +80,9 @@ const createCategory = async () => {
     newCategoryName.value = '';
     newCategoryAppliesTo.value = 'both';
     await loadOptions();
-    toast.show('Category added successfully.', 'success');
+    toast.show('Category added.', 'success');
   } catch (error: any) {
-    optionErrors.category = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save category.';
+    optionErrors.category = error?.response?.data?.message || error?.response?.data?.errors?.name?.[0] || 'Unable to save this category.';
   } finally {
     isCategorySubmitting.value = false;
   }
@@ -95,9 +95,9 @@ const removeType = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/types/${option.id}`);
     await loadOptions();
-    toast.show('Type deleted successfully.', 'danger');
+    toast.show('Type removed.', 'danger');
   } catch (error: any) {
-    optionErrors.type = error?.response?.data?.message || 'Unable to delete type.';
+    optionErrors.type = error?.response?.data?.message || 'Unable to remove this type.';
   } finally {
     deletingTypeId.value = null;
   }
@@ -110,9 +110,9 @@ const removeCategory = async (option: ManagedOption) => {
   try {
     await axiosInstance.delete(`/transaction-options/categories/${option.id}`);
     await loadOptions();
-    toast.show('Category deleted successfully.', 'danger');
+    toast.show('Category removed.', 'danger');
   } catch (error: any) {
-    optionErrors.category = error?.response?.data?.message || 'Unable to delete category.';
+    optionErrors.category = error?.response?.data?.message || 'Unable to remove this category.';
   } finally {
     deletingCategoryId.value = null;
   }
@@ -139,21 +139,21 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
   <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
     <div class="h-full w-full space-y-6">
       <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
-        <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Manage Options</p>
-        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Manage Transaction Types & Categories</h1>
-        <p class="mt-2 text-sm text-slate-300">Create the type and category lists that appear in your add transaction form.</p>
+        <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Transaction Setup</p>
+        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Manage transaction types and categories</h1>
+        <p class="mt-2 text-sm text-slate-300">Define the labels that appear when you add or filter transactions.</p>
       </section>
 
       <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <h2 class="text-xl font-semibold text-slate-900">Types</h2>
+          <h2 class="text-xl font-semibold text-slate-900">Transaction Types</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Income, Expense, Transfer.</p>
           <div class="mt-4 flex gap-2">
             <input
               v-model="newTypeName"
               type="text"
               class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
-              placeholder="Add a new type"
+              placeholder="Type name, e.g. Transfer"
             />
             <button
               type="button"
@@ -161,7 +161,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
               :disabled="isTypeSubmitting"
               class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              Add
+              Add Type
             </button>
           </div>
           <p v-if="optionErrors.type" class="mt-2 text-xs text-red-600">{{ optionErrors.type }}</p>
@@ -177,29 +177,30 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
                 @click="removeType(option)"
                 :disabled="deletingTypeId === option.id"
                 class="text-slate-400 hover:text-red-600 disabled:opacity-60"
+                :aria-label="`Remove type ${option.name}`"
               >
-                x
+                ×
               </button>
             </div>
           </div>
-          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No types yet. Add one above.</p>
+          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No transaction types yet. Add your first one above.</p>
         </section>
 
         <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
-          <h2 class="text-xl font-semibold text-slate-900">Categories</h2>
+          <h2 class="text-xl font-semibold text-slate-900">Transaction Categories</h2>
           <p class="mt-1 text-sm text-slate-500">Examples: Food, Transport, Salary.</p>
           <div class="mt-4 flex flex-col gap-2 sm:flex-row">
             <input
               v-model="newCategoryName"
               type="text"
               class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
-              placeholder="Add a new category"
+              placeholder="Category name, e.g. Food"
             />
             <select
               v-model="newCategoryAppliesTo"
               class="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10"
             >
-              <option value="both">Both</option>
+              <option value="both">Applies to both</option>
               <option value="expense">Expense only</option>
               <option value="income">Income only</option>
             </select>
@@ -209,7 +210,7 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
               :disabled="isCategorySubmitting"
               class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              Add
+              Add Category
             </button>
           </div>
           <p v-if="optionErrors.category" class="mt-2 text-xs text-red-600">{{ optionErrors.category }}</p>
@@ -231,12 +232,13 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
                 @click="removeCategory(option)"
                 :disabled="deletingCategoryId === option.id"
                 class="text-slate-400 hover:text-red-600 disabled:opacity-60"
+                :aria-label="`Remove category ${option.name}`"
               >
-                x
+                ×
               </button>
             </div>
           </div>
-          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No categories yet. Add one above.</p>
+          <p v-else-if="!isLoading" class="mt-6 text-sm text-slate-500">No transaction categories yet. Add your first one above.</p>
         </section>
       </div>
 
@@ -251,8 +253,8 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
                 <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
                 <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
               </div>
-              <p class="text-lg font-semibold text-slate-900">Loading ...</p>
-              <!-- <p class="mt-1 text-sm text-slate-500">Fetching your data.</p> -->
+              <p class="text-lg font-semibold text-slate-900">Loading...</p>
+              <!-- <p class="mt-1 text-sm text-slate-500">Fetching your options.</p> -->
             </div>
           </div>
         </Transition>
@@ -261,7 +263,6 @@ const categoryScopeClass = (value: ManagedOption['applies_to']) => {
     </div>
   </div>
 </template>
-
 
 
 

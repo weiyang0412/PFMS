@@ -211,16 +211,16 @@ class DashboardController extends Controller
             return $request->user()->studentSemesters()->whereKey($semesterId)->first();
         }
 
-        $monthStart = $anchorMonth->copy()->startOfMonth()->toDateString();
-        $monthEnd = $anchorMonth->copy()->endOfMonth()->toDateString();
-        $active = $request->user()->studentSemesters()
-            ->whereDate('start_date', '<=', $monthEnd)
-            ->whereDate('end_date', '>=', $monthStart)
+        $monthStart = $anchorMonth->copy()->startOfMonth();
+        $monthEnd = $anchorMonth->copy()->endOfMonth();
+        $matchedSemester = $request->user()->studentSemesters()
+            ->whereDate('start_date', '<=', $monthEnd->toDateString())
+            ->whereDate('end_date', '>=', $monthStart->toDateString())
             ->orderBy('start_date')
             ->first();
 
-        if ($active) {
-            return $active;
+        if ($matchedSemester) {
+            return $matchedSemester;
         }
 
         return $request->user()->studentSemesters()

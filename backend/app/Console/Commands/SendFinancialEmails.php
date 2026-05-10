@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Mail;
 class SendFinancialEmails extends Command
 {
     protected $signature = 'emails:send-financial-reports';
-    protected $description = 'Send reminder and periodic financial report emails';
+    protected $description = 'Send scheduled financial report emails';
 
     public function handle()
     {

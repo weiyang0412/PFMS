@@ -59,6 +59,9 @@ const toggleSettingsMenu = () => {
   isSettingsMenuOpen.value = !isSettingsMenuOpen.value;
 };
 const isSettingsRoute = computed(() => String(route.path).startsWith('/settings/'));
+const isStudentProfile = computed(() => {
+  return String(userStore.user?.profile_type ?? '').toLowerCase() === 'student';
+});
 
 const shouldShowSidebar = computed(() => {
   return !route.meta?.noSidebar;
@@ -217,19 +220,20 @@ onMounted(() => {
                 to="/settings/profile"
                 :class="settingsChildClasses(route.name === 'settings-profile')"
               >
-                Edit Profile
+                Profile
               </RouterLink>
               <RouterLink
+                v-if="isStudentProfile"
                 to="/settings/semesters"
                 :class="settingsChildClasses(route.name === 'settings-semesters')"
               >
-                Manage Semester
+                Semester Setup
               </RouterLink>
               <RouterLink
                 to="/settings/options"
                 :class="settingsChildClasses(route.name === 'settings-options')"
               >
-                Manage Options
+                Transaction Setup
               </RouterLink>
               <RouterLink
                 to="/settings/reminders"

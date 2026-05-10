@@ -80,6 +80,18 @@ const sortedSemesters = computed(() =>
     return aTime - bTime;
   }),
 );
+const semesterMatchesMonth = (semester: StudentSemester, monthYm: string) => {
+  if (!monthYm || !/^\d{4}-\d{2}$/.test(monthYm)) return false;
+  const [year, month] = monthYm.split('-').map(Number);
+  if (!year || !month) return false;
+
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0));
+  const start = new Date(`${semester.start_date}T00:00:00`);
+  const end = new Date(`${semester.end_date}T23:59:59`);
+  return start <= monthEnd && end >= monthStart;
+};
+const semesterForMonth = (monthYm: string) => studentSemesters.value.find((semester) => semesterMatchesMonth(semester, monthYm))?.id ?? null;
 const selectedSemesterIndex = computed(() =>
   sortedSemesters.value.findIndex((semester) => semester.id === selectedSemesterId.value),
 );
@@ -209,8 +221,8 @@ const loadStudentSemesters = async () => {
   try {
     const { data } = await axiosInstance.get('/student-semesters');
     studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
-    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
-      selectedSemesterId.value = studentSemesters.value[0].id;
+    if (periodType.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(month.value);
     }
   } catch (error) {
     console.error(error);
@@ -262,6 +274,9 @@ watch(
   (nextMonth) => {
     if (typeof nextMonth === 'string' && isValidMonth(nextMonth) && nextMonth !== month.value) {
       month.value = nextMonth;
+      if (periodType.value === 'semester') {
+        selectedSemesterId.value = null;
+      }
       loadBudgets();
     }
   },
@@ -270,6 +285,9 @@ watch(
 watch(
   () => month.value,
   (nextMonth) => {
+    if (periodType.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(nextMonth);
+    }
     const nextQuery: Record<string, any> = { ...route.query, month: nextMonth, period: periodType.value };
     if (periodType.value === 'semester' && selectedSemesterId.value) {
       nextQuery.semester_id = String(selectedSemesterId.value);
@@ -282,6 +300,11 @@ watch(
 watch(
   () => periodType.value,
   () => {
+    if (periodType.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(month.value);
+    } else {
+      selectedSemesterId.value = null;
+    }
     loadBudgets();
   },
 );

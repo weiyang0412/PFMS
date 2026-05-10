@@ -148,6 +148,25 @@ const accountContribution = computed(() => {
     contribution: (Number(account.balance || 0) / total) * 100,
   }));
 });
+const sortedSemesters = computed(() =>
+  [...studentSemesters.value].sort((a, b) => {
+    const aTime = new Date(`${a.start_date}T00:00:00`).getTime();
+    const bTime = new Date(`${b.start_date}T00:00:00`).getTime();
+    return aTime - bTime;
+  }),
+);
+const semesterMatchesMonth = (semester: StudentSemester, monthYm: string) => {
+  if (!monthYm || !/^\d{4}-\d{2}$/.test(monthYm)) return false;
+  const [year, month] = monthYm.split('-').map(Number);
+  if (!year || !month) return false;
+
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0));
+  const start = new Date(`${semester.start_date}T00:00:00`);
+  const end = new Date(`${semester.end_date}T23:59:59`);
+  return start <= monthEnd && end >= monthStart;
+};
+const semesterForMonth = (monthYm: string) => studentSemesters.value.find((semester) => semesterMatchesMonth(semester, monthYm))?.id ?? null;
 const buildPeriodParams = () => {
   const params: Record<string, string | number> = {
     period: periodType.value,
@@ -169,8 +188,8 @@ const loadStudentSemesters = async () => {
   try {
     const { data } = await axiosInstance.get('/student-semesters');
     studentSemesters.value = Array.isArray(data?.items) ? data.items : [];
-    if (!selectedSemesterId.value && studentSemesters.value.length > 0) {
-      selectedSemesterId.value = studentSemesters.value[0].id;
+    if (periodType.value === 'semester') {
+      selectedSemesterId.value = semesterForMonth(selectedMonth.value);
     }
   } catch (error) {
     console.error(error);
@@ -201,6 +220,14 @@ onMounted(() => {
     ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly')
     : 'monthly';
   loadStudentSemesters().finally(() => loadSummary());
+});
+
+watch([selectedMonth, periodType], () => {
+  if (periodType.value === 'semester') {
+    selectedSemesterId.value = semesterForMonth(selectedMonth.value);
+  } else {
+    selectedSemesterId.value = null;
+  }
 });
 watch(
   () => userStore.user?.profile_type,
@@ -248,7 +275,7 @@ watch(
               @change="loadSummary(true)"
               class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
             >
-              <option v-for="semester in studentSemesters" :key="semester.id" :value="semester.id">
+              <option v-for="semester in sortedSemesters" :key="semester.id" :value="semester.id">
                 {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
               </option>
             </select>
@@ -396,4 +423,3 @@ watch(
     </Teleport>
   </div>
 </template>
-

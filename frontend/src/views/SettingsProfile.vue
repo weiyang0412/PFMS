@@ -3,6 +3,8 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useUserStore } from '../stores/userStore';
 
 const userStore = useUserStore();
+const isLoading = computed(() => !userStore.authChecked);
+const showSavingOverlay = computed(() => isSavingProfile.value);
 const profileForm = reactive({
   name: userStore.user?.name || '',
   email: userStore.user?.email || '',
@@ -11,7 +13,6 @@ const profileForm = reactive({
 });
 const isSavingProfile = ref(false);
 const profileError = ref('');
-const showLoadingOverlay = computed(() => isSavingProfile.value);
 
 const saveProfile = async () => {
   profileError.value = '';
@@ -110,7 +111,7 @@ watch(
             :disabled="isSavingProfile"
             class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {{ isSavingProfile ? 'Saving...' : 'Save Profile' }}
+            Save Profile
           </button>
         </div>
       </section>
@@ -118,13 +119,15 @@ watch(
 
     <Teleport to="body">
       <Transition name="loading-fade">
-        <div v-if="showLoadingOverlay" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+        <div v-if="isLoading || showSavingOverlay" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
           <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
             <div class="relative mb-4 h-12 w-12">
               <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
               <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
             </div>
-            <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+            <p class="text-lg font-semibold text-slate-900">
+              {{ isLoading ? 'Loading...' : 'Saving...' }}
+            </p>
           </div>
         </div>
       </Transition>

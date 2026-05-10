@@ -12,22 +12,26 @@ class NotificationPreference extends Model
 
     protected $fillable = [
         'user_id',
-        'reminders_enabled',
-        'reminder_days_before',
+        'budget_alerts_enabled',
         'reports_enabled',
         'report_frequency',
         'report_weekday',
         'report_month_day',
+        'last_report_sent_at',
+        'last_reminder_sent_at',
+        'last_budget_warning_sent_at',
+        'last_budget_urgent_sent_at',
     ];
 
     protected $casts = [
-        'reminders_enabled' => 'boolean',
+        'budget_alerts_enabled' => 'boolean',
         'reports_enabled' => 'boolean',
-        'reminder_days_before' => 'integer',
         'report_weekday' => 'integer',
         'report_month_day' => 'integer',
         'last_report_sent_at' => 'datetime',
         'last_reminder_sent_at' => 'datetime',
+        'last_budget_warning_sent_at' => 'datetime',
+        'last_budget_urgent_sent_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
