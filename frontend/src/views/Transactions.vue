@@ -58,6 +58,7 @@ const totalTransactions = ref(0);
 const isBudgetLoading = ref(false);
 const budgetSummary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const budgetItems = ref<BudgetItem[]>([]);
+const isReportExporting = ref(false);
 const typeFilter = ref('all');
 const categoryFilter = ref('all');
 const descriptionSearch = ref('');
@@ -248,6 +249,46 @@ const loadBudgetSnapshot = async () => {
     budgetItems.value = data.items || [];
   } catch (error) { console.error(error); } finally { isBudgetLoading.value = false; }
 };
+const buildReportParams = () => {
+  const params: Record<string, string | number> = {
+    period: selectedPeriod.value,
+    month: monthFilter.value || currentMonth(),
+  };
+
+  if (selectedPeriod.value === 'semester' && selectedSemesterId.value) {
+    params.semester_id = selectedSemesterId.value;
+  }
+
+  return params;
+};
+const exportFinancialReport = async (format: 'pdf' | 'excel') => {
+  isReportExporting.value = true;
+  try {
+    const response = await axiosInstance.get('/reports/financial/export', {
+      params: { ...buildReportParams(), format },
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `financial-report-${monthFilter.value || currentMonth()}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast.show(`Financial report exported as ${format.toUpperCase()}.`, 'success');
+  } catch (error) {
+    console.error(error);
+    toast.show('Unable to export the financial report.', 'danger');
+  } finally {
+    isReportExporting.value = false;
+  }
+};
 const loadSemesters = async () => {
   if (!isStudentProfile.value) {
     semesters.value = [];
@@ -415,9 +456,27 @@ watch(
             <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Track every money movement</h1>
             <p class="mt-2 text-sm text-slate-300">Track your income and expenses on a full page.</p>
           </div>
-          <button type="button" @click="openAddModal"
-            class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20">Add
-            Transaction</button>
+          <div class="flex flex-wrap gap-3">
+            <button
+              type="button"
+              @click="exportFinancialReport('pdf')"
+              :disabled="isReportExporting"
+              class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-60"
+            >
+              {{ isReportExporting ? 'Exporting...' : 'Export PDF' }}
+            </button>
+            <button
+              type="button"
+              @click="exportFinancialReport('excel')"
+              :disabled="isReportExporting"
+              class="rounded-xl border border-cyan-300/30 bg-cyan-400/15 px-5 py-3 text-sm font-medium text-white transition hover:bg-cyan-400/25 disabled:opacity-60"
+            >
+              {{ isReportExporting ? 'Exporting...' : 'Export Excel' }}
+            </button>
+            <button type="button" @click="openAddModal"
+              class="rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/20">Add
+              Transaction</button>
+          </div>
         </div>
       </section>
 

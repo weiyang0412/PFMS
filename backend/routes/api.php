@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\FinancialReportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\StudentSemesterController;
 use App\Http\Controllers\TransactionController;
@@ -34,6 +35,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notification-preferences/send-test-budget-alert', [NotificationPreferenceController::class, 'sendTestBudgetAlert']);
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    Route::get('/reports/financial', [FinancialReportController::class, 'index']);
+    Route::get('/reports/financial/export', [FinancialReportController::class, 'export']);
 
     Route::get('/users', function (Request $request) {
         return User::all();

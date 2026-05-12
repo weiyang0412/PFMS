@@ -87,7 +87,7 @@ onMounted(() => {
     <div class="space-y-6">
       <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <p class="text-sm uppercase tracking-[0.3em] text-slate-400">Notifications</p>
-        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Budget Alerts & Reports</h1>
+        <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Notifications & Reports</h1>
         <p class="mt-2 text-sm text-slate-300">Choose when you want budget warnings and email reports to arrive.</p>
       </section>
 

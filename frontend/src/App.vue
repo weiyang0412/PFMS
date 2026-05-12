@@ -239,7 +239,7 @@ onMounted(() => {
                 to="/settings/reminders"
                 :class="settingsChildClasses(route.name === 'settings-reminders')"
               >
-                Reminders & Reports
+                Notifications & Reports
               </RouterLink>
             </div>
           </li>
