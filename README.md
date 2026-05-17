@@ -94,6 +94,7 @@ Use your preferred local server setup, or start Laravel manually:
 ```bash
 cd backend
 php artisan serve
+php artisan schedule:work
 ```
 
 If you use Laravel with a separate API URL, make sure the frontend points to the correct backend endpoint.

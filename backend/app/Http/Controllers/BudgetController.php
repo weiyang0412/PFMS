@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Budget;
+use App\Models\NotificationPreference;
 use App\Models\StudentSemester;
 use App\Models\TransactionCategory;
 use Carbon\Carbon;
@@ -157,6 +158,8 @@ class BudgetController extends Controller
             ]
         );
 
+        $this->resetBudgetAlertTimestamps($request->user()->id);
+
         return response()->json([
             'id' => $budget->id,
             'month' => $budget->month,
@@ -200,6 +203,8 @@ class BudgetController extends Controller
                 ]
             );
         }
+
+        $this->resetBudgetAlertTimestamps($request->user()->id);
 
         return response()->json([
             'copied_count' => $previousBudgets->count(),
@@ -292,5 +297,13 @@ class BudgetController extends Controller
         $threshold = (int) $input;
         if ($threshold < 1 || $threshold > 100) return 80;
         return $threshold;
+    }
+
+    private function resetBudgetAlertTimestamps(int $userId): void
+    {
+        NotificationPreference::where('user_id', $userId)->update([
+            'last_budget_warning_sent_at' => null,
+            'last_budget_urgent_sent_at' => null,
+        ]);
     }
 }

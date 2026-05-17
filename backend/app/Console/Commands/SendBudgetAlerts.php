@@ -38,10 +38,10 @@ class SendBudgetAlerts extends Command
 
             $alertLevel = $this->resolveAlertLevel($alerts);
             if ($alertLevel === 'urgent') {
-                if ($preference->last_budget_urgent_sent_at && $preference->last_budget_urgent_sent_at->isSameDay($today)) {
+                if ($this->alreadySentThisBudgetMonth($preference->last_budget_urgent_sent_at, $currentMonth)) {
                     continue;
                 }
-            } elseif ($preference->last_budget_warning_sent_at && $preference->last_budget_warning_sent_at->isSameDay($today)) {
+            } elseif ($this->alreadySentThisBudgetMonth($preference->last_budget_warning_sent_at, $currentMonth)) {
                 continue;
             }
 
@@ -79,6 +79,11 @@ class SendBudgetAlerts extends Command
         $highestUsage = (float) $alerts->max('usage_pct');
 
         return $highestUsage >= 100 ? 'urgent' : 'warning';
+    }
+
+    private function alreadySentThisBudgetMonth(?Carbon $sentAt, string $currentMonth): bool
+    {
+        return $sentAt !== null && $sentAt->format('Y-m') === $currentMonth;
     }
 
     private function buildAdvice($alerts): string
