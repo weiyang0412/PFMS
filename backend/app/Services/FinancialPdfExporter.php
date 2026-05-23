@@ -148,20 +148,23 @@ class FinancialPdfExporter
 
     private function drawHeaderBand(array $report): string
     {
-        $period = $this->escapePdfText((string) ($report['period']['label'] ?? 'Selected period'));
-        $range = $this->escapePdfText($this->formatDateRange(
-            (string) ($report['period']['start_date'] ?? ''),
-            (string) ($report['period']['end_date'] ?? '')
-        ));
+        $periodFormatter = new ReportPeriodFormatter();
+        $period = $this->escapePdfText($periodFormatter->format($report));
+        $range = $this->escapePdfText($periodFormatter->formatRange($report));
         $generated = $this->escapePdfText($this->formatDateTime((string) ($report['generated_at'] ?? now()->toIso8601String())));
+        $isSemester = $periodFormatter->isSemester($report);
 
         $stream = '';
         $stream .= $this->drawRect(0, 670, self::PAGE_WIDTH, 172, self::COLOR_DARKER);
         $stream .= $this->drawText(36, 792, 8, 'F1', 'FINANCIAL REPORT', self::COLOR_HEADER_MUTED);
         $stream .= $this->drawText(36, 770, 20, 'F2', $this->escapePdfText((string) ($report['title'] ?? 'Monthly snapshot')), self::COLOR_HEADER_TEXT);
-        $stream .= $this->drawText(36, 744, 10, 'F1', 'Generated ' . $generated, self::COLOR_HEADER_MUTED);
-        $stream .= $this->drawText(36, 728, 10, 'F1', 'Period: ' . $period, self::COLOR_HEADER_TEXT);
-        $stream .= $this->drawText(36, 714, 9, 'F1', 'Range: ' . $range, self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText(36, 744, 10, 'F1', 'Period: ' . $period, self::COLOR_HEADER_MUTED);
+        if ($isSemester) {
+            $stream .= $this->drawText(36, 728, 9, 'F1', 'Range: ' . $range, self::COLOR_HEADER_MUTED);
+            $stream .= $this->drawText(36, 714, 10, 'F1', 'Generated ' . $generated, self::COLOR_HEADER_MUTED);
+        } else {
+            $stream .= $this->drawText(36, 728, 10, 'F1', 'Generated ' . $generated, self::COLOR_HEADER_MUTED);
+        }
         $stream .= $this->drawImage(5, 452, 720, 96, 96);
 
         return $stream;
