@@ -8,6 +8,44 @@ use Throwable;
 
 class OllamaFinancialInsightsService
 {
+    public function warmUp(): bool
+    {
+        $baseUrl = rtrim((string) config('ollama.base_url', ''), '/');
+        $model = (string) config('ollama.model', 'llama3.2:3b');
+
+        if ($baseUrl === '' || $model === '') {
+            return false;
+        }
+
+        try {
+            $response = Http::timeout(8)
+                ->acceptJson()
+                ->post($baseUrl . '/api/chat', [
+                    'model' => $model,
+                    'stream' => false,
+                    'keep_alive' => '10m',
+                    'options' => [
+                        'temperature' => 0,
+                    ],
+                    'messages' => [
+                        [
+                            'role' => 'system',
+                            'content' => 'Warm up the local model. Reply with a single short confirmation.',
+                        ],
+                        [
+                            'role' => 'user',
+                            'content' => 'OK',
+                        ],
+                    ],
+                ]);
+
+            return $response->successful();
+        } catch (Throwable $e) {
+            report($e);
+            return false;
+        }
+    }
+
     public function generate(array $context): ?array
     {
         $baseUrl = rtrim((string) config('ollama.base_url', ''), '/');
@@ -68,6 +106,7 @@ class OllamaFinancialInsightsService
         return implode("\n", [
             'You are a local AI financial analyst for a personal finance app.',
             'Use only the supplied data. Do not invent external facts.',
+            'Use RM for all currency values. Do not use $ or other currency symbols.',
             'Return JSON only. No markdown, no code fences, no commentary.',
             'Keep the analysis concise, practical, and grounded in the numbers.',
             'If a field is unknown, use null or an empty array.',
@@ -164,7 +203,7 @@ class OllamaFinancialInsightsService
         $normalized['forecast'] = $this->normalizeForecast((array) ($normalized['forecast'] ?? []), $fallback['forecast']);
         $normalized['recommendations'] = $this->normalizeRecommendations((array) ($normalized['recommendations'] ?? []), $fallback['recommendations']);
 
-        return $normalized;
+        return $this->sanitizeAiResponse($normalized);
     }
 
     private function buildFallback(array $context, string $model): array
@@ -270,5 +309,29 @@ class OllamaFinancialInsightsService
         }
 
         return $items !== [] ? $items : $fallback;
+    }
+
+    private function sanitizeAiResponse($value)
+    {
+        if (is_string($value)) {
+            return $this->sanitizeCurrencyText($value);
+        }
+
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->sanitizeAiResponse($item);
+        }
+
+        return $value;
+    }
+
+    private function sanitizeCurrencyText(string $value): string
+    {
+        $value = str_replace(['US$', '$'], 'RM ', $value);
+
+        return preg_replace('/\s+/', ' ', trim($value)) ?? $value;
     }
 }

@@ -40,6 +40,7 @@ const items = ref<BudgetItem[]>([]);
 const summary = ref<BudgetSummary>({ total_budget: 0, total_spent: 0, warning_count: 0, total_overspent: 0 });
 const isLoading = ref(false);
 const isCopying = ref(false);
+const isBulkSaving = ref(false);
 const hasLoaded = ref(false);
 const savingCategoryIds = ref<number[]>([]);
 const deletingCategoryIds = ref<number[]>([]);
@@ -111,6 +112,9 @@ const canShiftNext = computed(() => {
 
 const isSaving = (categoryId: number) => savingCategoryIds.value.includes(categoryId);
 const isDeleting = (categoryId: number) => deletingCategoryIds.value.includes(categoryId);
+const saveableItems = computed(() =>
+  items.value.filter((item) => item.can_edit && Number.isFinite(Number(item.amount)) && Number(item.amount) > 0),
+);
 
 const setBusy = (type: 'save' | 'delete', categoryId: number, enabled: boolean) => {
   const source = type === 'save' ? savingCategoryIds : deletingCategoryIds;
@@ -170,6 +174,40 @@ const saveBudget = async (item: BudgetItem) => {
     toast.show(`Unable to save budget for ${item.category}.`, 'danger');
   } finally {
     setBusy('save', item.category_id, false);
+  }
+};
+
+const saveAllBudgets = async () => {
+  if (periodType.value !== 'monthly') {
+    toast.show('Bulk save is only available in monthly view.', 'danger');
+    return;
+  }
+
+  const payloadItems = saveableItems.value.map((item) => ({
+    transaction_category_id: item.category_id,
+    amount: Number(item.amount ?? 0),
+    alert_threshold: Math.min(Math.max(Number(item.alert_threshold || 80), 1), 100),
+  }));
+
+  if (!payloadItems.length) {
+    toast.show('Add at least one budget amount before saving all.', 'danger');
+    return;
+  }
+
+  isBulkSaving.value = true;
+  try {
+    const { data } = await axiosInstance.post('/budgets/bulk', {
+      month: month.value,
+      period: periodType.value,
+      items: payloadItems,
+    });
+    await loadBudgets();
+    toast.show(`Saved ${Number(data?.saved_count ?? payloadItems.length)} budget(s).`, 'success');
+  } catch (error) {
+    console.error(error);
+    toast.show('Unable to save all budgets right now.', 'danger');
+  } finally {
+    isBulkSaving.value = false;
   }
 };
 
@@ -375,6 +413,14 @@ watch(
                 <span class="text-xs text-slate-300">Default Alert %</span>
                 <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-white/20 bg-slate-900/70 px-2 py-1 text-sm text-white" @change="persistDefaultThreshold" />
               </div>
+              <button
+                type="button"
+                @click="saveAllBudgets"
+                :disabled="isLoading || isBulkSaving || periodType === 'semester' || saveableItems.length === 0"
+                class="rounded-md border border-cyan-300/40 bg-cyan-500/15 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-60"
+              >
+                {{ isBulkSaving ? 'Saving All...' : 'Save All' }}
+              </button>
               <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying || periodType === 'semester'" class="rounded-md px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-60">
                 {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
               </button>

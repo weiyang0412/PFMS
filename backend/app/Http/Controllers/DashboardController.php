@@ -6,6 +6,7 @@ use App\Models\StudentSemester;
 use App\Services\OllamaFinancialInsightsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -154,8 +155,22 @@ class DashboardController extends Controller
                 'savings_rate' => $savingsRate,
             ],
         ];
-        $aiInsights = $this->ollamaFinancialInsightsService->generate($aiContext)
-            ?? $this->buildOllamaFallback($aiContext);
+        $aiCacheKey = 'ai-insights:v4:' . $user->id . ':' . sha1(json_encode([
+            'period_type' => $periodType,
+            'month' => $anchorMonth->format('Y-m'),
+            'semester_id' => $selectedSemester ? $selectedSemester->id : null,
+            'accounts_updated_at' => $accounts->max(fn ($account) => optional($account->updated_at)->getTimestamp() ?? 0),
+            'transactions_updated_at' => $transactions->max(fn ($transaction) => optional($transaction->updated_at)->getTimestamp() ?? 0),
+            'transaction_count' => $currentPeriodTransactions->count(),
+            'period_income' => round($periodIncome, 2),
+            'period_expense' => round($periodExpense, 2),
+            'savings_rate' => $savingsRate,
+        ], JSON_THROW_ON_ERROR));
+
+        $aiInsights = Cache::remember($aiCacheKey, now()->addMinutes(10), function () use ($aiContext) {
+            return $this->ollamaFinancialInsightsService->generate($aiContext)
+                ?? $this->buildOllamaFallback($aiContext);
+        });
 
         return response()->json([
             'overview' => $aiContext['overview'],
@@ -185,6 +200,13 @@ class DashboardController extends Controller
                 'semester_id' => $selectedSemester ? $selectedSemester->id : null,
             ],
         ]);
+    }
+
+    public function warmup(): \Illuminate\Http\Response
+    {
+        $this->ollamaFinancialInsightsService->warmUp();
+
+        return response()->noContent();
     }
 
     private function resolvePeriodType(?string $input, ?string $profileType): string

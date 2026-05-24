@@ -126,6 +126,8 @@ const periodType = ref<'monthly' | 'semester'>('monthly');
 const selectedMonth = ref(malaysiaCurrentMonthYm());
 const studentSemesters = ref<StudentSemester[]>([]);
 const selectedSemesterId = ref<number | null>(null);
+const warmupStorageKey = 'ai-insights:last-warmup-at';
+const warmupCooldownMs = 10 * 60 * 1000;
 
 const overview = computed(() => summary.value?.overview ?? defaultOverview);
 const period = computed(() => summary.value?.period ?? defaultPeriod);
@@ -187,6 +189,24 @@ const loadStudentSemesters = async () => {
     if (periodType.value === 'semester') {
       selectedSemesterId.value = semesterForMonth(selectedMonth.value);
     }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const shouldWarmupModel = () => {
+  const raw = localStorage.getItem(warmupStorageKey);
+  const lastWarmup = Number(raw || 0);
+  return !Number.isFinite(lastWarmup) || Date.now() - lastWarmup > warmupCooldownMs;
+};
+
+const markWarmup = () => {
+  localStorage.setItem(warmupStorageKey, String(Date.now()));
+};
+
+const warmupModel = async () => {
+  try {
+    await axiosInstance.post('/dashboard/warmup');
   } catch (error) {
     console.error(error);
   }
@@ -264,13 +284,13 @@ const signalRows = computed(() => [
     label: 'Largest expense category',
     value: aiInsights.value.signals.largest_expense_category ?? 'Uncategorized',
     detail: `${aiInsights.value.signals.largest_expense_share.toFixed(1)}% of current expenses`,
-    tone: 'text-slate-900',
+    tone: 'text-slate-600',
   },
   {
     label: 'Transactions analysed',
     value: String(aiInsights.value.signals.transaction_count),
     detail: `${aiInsights.value.signals.savings_rate.toFixed(1)}% savings rate`,
-    tone: 'text-slate-900',
+    tone: 'text-slate-600',
   },
 ]);
 
@@ -291,7 +311,12 @@ onMounted(() => {
   periodType.value = isStudentProfile.value
     ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly')
     : 'monthly';
-  loadStudentSemesters().finally(() => loadInsights());
+  if (shouldWarmupModel()) {
+    void warmupModel().finally(() => {
+      markWarmup();
+    });
+  }
+  void Promise.all([loadStudentSemesters(), loadInsights()]);
 });
 
 watch([selectedMonth, periodType], () => {
@@ -312,6 +337,32 @@ watch(
   },
 );
 </script>
+
+<style scoped>
+:global(.bg-slate-900 .text-slate-500),
+:global(.bg-slate-900 .text-slate-600),
+:global(.bg-slate-900 .text-slate-700),
+:global(.bg-slate-800 .text-slate-500),
+:global(.bg-slate-800 .text-slate-600),
+:global(.bg-slate-800 .text-slate-700),
+:global(.bg-slate-950 .text-slate-500),
+:global(.bg-slate-950 .text-slate-600),
+:global(.bg-slate-950 .text-slate-700) {
+  color: rgb(226 232 240) !important;
+}
+
+:global(.bg-slate-900 .text-slate-400),
+:global(.bg-slate-800 .text-slate-400),
+:global(.bg-slate-950 .text-slate-400) {
+  color: rgb(203 213 225) !important;
+}
+
+:global(.bg-slate-900 .text-slate-300),
+:global(.bg-slate-800 .text-slate-300),
+:global(.bg-slate-950 .text-slate-300) {
+  color: rgb(248 250 252) !important;
+}
+</style>
 
 <template>
   <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
@@ -405,7 +456,7 @@ watch(
         </div>
       </section>
 
-      <section class="grid gap-6 xl:grid-cols-[1fr_1fr_0.9fr]">
+      <section class="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -468,7 +519,7 @@ watch(
           </p>
         </article>
 
-        <article class="rounded-[28px] bg-slate-900 p-6 text-white shadow-sm">
+        <article class="rounded-[28px] bg-slate-900 p-6 text-white shadow-sm xl:col-span-2">
           <div>
             <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Signals</p>
             <h2 class="mt-1 text-2xl font-semibold">Behavior snapshot</h2>

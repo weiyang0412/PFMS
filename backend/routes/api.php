@@ -35,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notification-preferences/send-test-budget-alert', [NotificationPreferenceController::class, 'sendTestBudgetAlert']);
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    Route::post('/dashboard/warmup', [DashboardController::class, 'warmup']);
     Route::get('/reports/financial', [FinancialReportController::class, 'index']);
     Route::get('/reports/financial/export', [FinancialReportController::class, 'export']);
 
@@ -60,6 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/budgets', [BudgetController::class, 'index']);
     Route::post('/budgets', [BudgetController::class, 'store']);
+    Route::post('/budgets/bulk', [BudgetController::class, 'bulkStore']);
     Route::post('/budgets/copy-previous-month', [BudgetController::class, 'copyPreviousMonth']);
     Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy']);
 

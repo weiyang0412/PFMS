@@ -9,6 +9,7 @@ use App\Models\TransactionCategory;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class BudgetController extends Controller
 {
@@ -166,6 +167,64 @@ class BudgetController extends Controller
             'transaction_category_id' => $budget->transaction_category_id,
             'amount' => (float) $budget->amount,
             'alert_threshold' => (int) $budget->alert_threshold,
+        ]);
+    }
+
+    public function bulkStore(Request $request)
+    {
+        $validated = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+            'period' => ['nullable', Rule::in(['monthly', 'semester'])],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.transaction_category_id' => [
+                'required',
+                'integer',
+                Rule::exists('transaction_categories', 'id')->where(
+                    fn ($query) => $query->where('user_id', $request->user()->id)
+                ),
+            ],
+            'items.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'items.*.alert_threshold' => ['nullable', 'integer', 'between:1,100'],
+        ]);
+
+        if (($validated['period'] ?? 'monthly') !== 'monthly') {
+            return response()->json([
+                'message' => 'Semester view is read-only for now. Save monthly budgets to build semester totals.',
+            ], 422);
+        }
+
+        $savedBudgets = DB::transaction(function () use ($validated, $request) {
+            $saved = [];
+            foreach ($validated['items'] as $item) {
+                $budget = Budget::updateOrCreate(
+                    [
+                        'user_id' => $request->user()->id,
+                        'transaction_category_id' => $item['transaction_category_id'],
+                        'month' => $validated['month'],
+                    ],
+                    [
+                        'amount' => $item['amount'],
+                        'alert_threshold' => $item['alert_threshold'] ?? 80,
+                    ]
+                );
+
+                $saved[] = [
+                    'id' => $budget->id,
+                    'month' => $budget->month,
+                    'transaction_category_id' => $budget->transaction_category_id,
+                    'amount' => (float) $budget->amount,
+                    'alert_threshold' => (int) $budget->alert_threshold,
+                ];
+            }
+
+            return $saved;
+        });
+
+        $this->resetBudgetAlertTimestamps($request->user()->id);
+
+        return response()->json([
+            'saved_count' => count($savedBudgets),
+            'items' => $savedBudgets,
         ]);
     }
 
