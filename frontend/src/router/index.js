@@ -12,6 +12,7 @@ import SettingsReminders from '../views/SettingsReminders.vue'
 import Budgets from '../views/Budgets.vue'
 import FinancialTrend from '../views/FinancialTrend.vue'
 import FinancialSummary from '../views/FinancialSummary.vue'
+import AIInsights from '../views/AIInsights.vue'
 import { useUserStore } from '../stores/userStore'
 
 const router = createRouter({
@@ -97,6 +98,12 @@ const router = createRouter({
             path: "/financial-summary",
             name: "financial-summary",
             component: FinancialSummary,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/ai-insights",
+            name: "ai-insights",
+            component: AIInsights,
             meta: { requiresAuth: true },
         },
     ],

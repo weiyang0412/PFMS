@@ -201,6 +201,14 @@ onMounted(() => {
             </RouterLink>
           </li>
           <li>
+            <RouterLink to="/ai-insights" :class="sidebarItemClasses">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l1.8 4.3L18 9.1l-4.2 1.8L12 15l-1.8-4.1L6 9.1l4.2-1.8L12 3Zm6.2 9.1 1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1 1-2.4Zm-12.4 0 1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1 1-2.4Z" />
+              </svg>
+              <span :class="sidebarLabelClasses">AI Insights</span>
+            </RouterLink>
+          </li>
+          <li>
             <button
               type="button"
               :class="[sidebarItemClasses, 'w-full', isSettingsRoute ? 'border-cyan-300/30 bg-cyan-400/15 text-white shadow-[0_8px_24px_-10px_rgba(34,211,238,0.75)]' : '']"

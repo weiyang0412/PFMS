@@ -3,11 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\StudentSemester;
+use App\Services\OllamaFinancialInsightsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    private OllamaFinancialInsightsService $ollamaFinancialInsightsService;
+
+    public function __construct(
+        OllamaFinancialInsightsService $ollamaFinancialInsightsService
+    )
+    {
+        $this->ollamaFinancialInsightsService = $ollamaFinancialInsightsService;
+    }
+
     public function summary(Request $request)
     {
         $user = $request->user();
@@ -110,8 +120,19 @@ class DashboardController extends Controller
         $averageExpense = $currentPeriodTransactions
             ->filter(fn ($transaction) => strtolower((string) optional($transaction->transactionType)->name) === 'expense')
             ->avg('amount');
-
-        return response()->json([
+        $incomeChangePct = $this->calculatePercentageChange($periodIncome, $previousIncome);
+        $expenseChangePct = $this->calculatePercentageChange($periodExpense, $previousExpense);
+        $aiContext = [
+            'period' => [
+                'type' => $periodType,
+                'label' => $periodLabel,
+                'comparison_label' => $periodType === 'semester' ? 'vs previous semester' : 'vs last month',
+                'updated_at' => $today->format('Y-m-d'),
+                'month' => $anchorMonth->format('Y-m'),
+                'semester_id' => $selectedSemester ? $selectedSemester->id : null,
+                'next_month_key' => $anchorMonth->copy()->addMonthNoOverflow()->format('Y-m'),
+                'next_month_label' => $anchorMonth->copy()->addMonthNoOverflow()->format('M Y'),
+            ],
             'overview' => [
                 'total_balance' => round($totalBalance, 2),
                 'account_count' => $accounts->count(),
@@ -119,9 +140,25 @@ class DashboardController extends Controller
                 'monthly_expense' => round($periodExpense, 2),
                 'net_cashflow' => round($netCashflow, 2),
                 'savings_rate' => $savingsRate,
-                'income_change_pct' => $this->calculatePercentageChange($periodIncome, $previousIncome),
-                'expense_change_pct' => $this->calculatePercentageChange($periodExpense, $previousExpense),
+                'income_change_pct' => $incomeChangePct,
+                'expense_change_pct' => $expenseChangePct,
             ],
+            'trend' => $monthlyTrend->values()->all(),
+            'category_breakdown' => $categoryBreakdown->values()->all(),
+            'recent_transactions' => $recentTransactions->all(),
+            'signals' => [
+                'largest_expense_category' => $largestExpenseCategory['category'] ?? null,
+                'largest_expense_amount' => $largestExpenseCategory['amount'] ?? 0,
+                'largest_expense_share' => $largestExpenseCategory['percentage'] ?? 0,
+                'transaction_count' => $currentPeriodTransactions->count(),
+                'savings_rate' => $savingsRate,
+            ],
+        ];
+        $aiInsights = $this->ollamaFinancialInsightsService->generate($aiContext)
+            ?? $this->buildOllamaFallback($aiContext);
+
+        return response()->json([
+            'overview' => $aiContext['overview'],
             'accounts' => $accounts->map(function ($account) {
                 return [
                     'id' => $account->id,
@@ -138,6 +175,7 @@ class DashboardController extends Controller
                 'average_expense' => round((float) ($averageExpense ?? 0), 2),
                 'transactions_this_month' => $currentPeriodTransactions->count(),
             ],
+            'ai_insights' => $aiInsights,
             'period' => [
                 'type' => $periodType,
                 'label' => $periodLabel,
@@ -256,5 +294,40 @@ class DashboardController extends Controller
         }
 
         return round((($current - $previous) / $previous) * 100, 1);
+    }
+
+    private function buildOllamaFallback(array $context): array
+    {
+        return [
+            'source' => 'ollama',
+            'model' => (string) config('ollama.model', ''),
+            'risk_level' => 'low',
+            'confidence' => 0,
+            'summary' => 'Start the local Ollama service to generate AI insights.',
+            'signals' => [
+                'income_trend' => 'stable',
+                'expense_trend' => 'stable',
+                'largest_expense_category' => null,
+                'largest_expense_amount' => 0,
+                'largest_expense_share' => 0,
+                'transaction_count' => (int) data_get($context, 'signals.transaction_count', 0),
+                'savings_rate' => (float) data_get($context, 'signals.savings_rate', 0),
+            ],
+            'forecast' => [
+                'next_month' => [
+                    'month' => (string) data_get($context, 'period.next_month_label', 'Next month'),
+                    'month_key' => (string) data_get($context, 'period.next_month_key', ''),
+                    'income' => 0,
+                    'expense' => 0,
+                    'net' => 0,
+                ],
+                'next_three_months' => [],
+            ],
+            'recommendations' => [[
+                'title' => 'Connect Ollama to enable AI insights',
+                'detail' => 'Keep Ollama running and make sure the model name in .env matches the one you pulled locally.',
+                'priority' => 'high',
+            ]],
+        ];
     }
 }
