@@ -171,6 +171,7 @@ class DashboardController extends Controller
             return $this->ollamaFinancialInsightsService->generate($aiContext)
                 ?? $this->buildOllamaFallback($aiContext);
         });
+        $aiInsights['forecast'] = $this->buildTrendForecast($monthlyTrend->values()->all(), $anchorMonth, $aiContext['period']['next_month_key']);
 
         return response()->json([
             'overview' => $aiContext['overview'],
@@ -316,6 +317,88 @@ class DashboardController extends Controller
         }
 
         return round((($current - $previous) / $previous) * 100, 1);
+    }
+
+    private function buildTrendForecast(array $monthlyTrend, Carbon $anchorMonth, string $nextMonthKey): array
+    {
+        $recentTrend = array_values(array_slice($monthlyTrend, -6));
+        $forecastMonths = [];
+
+        for ($offset = 1; $offset <= 3; $offset++) {
+            $month = $anchorMonth->copy()->addMonthsNoOverflow($offset);
+            $forecastMonths[] = [
+                'month' => $month->format('M Y'),
+                'month_key' => $month->format('Y-m'),
+                'income' => 0,
+                'expense' => 0,
+                'net' => 0,
+            ];
+        }
+
+        if (count($recentTrend) === 0) {
+            return [
+                'next_month' => $forecastMonths[0],
+                'next_three_months' => $forecastMonths,
+            ];
+        }
+
+        $incomeSeries = array_map(fn ($item) => (float) ($item['income'] ?? 0), $recentTrend);
+        $expenseSeries = array_map(fn ($item) => (float) ($item['expense'] ?? 0), $recentTrend);
+        $incomeForecasts = $this->forecastSeries($incomeSeries, 3);
+        $expenseForecasts = $this->forecastSeries($expenseSeries, 3);
+
+        foreach ($forecastMonths as $index => $month) {
+            $income = round(max(0, $incomeForecasts[$index]), 2);
+            $expense = round(max(0, $expenseForecasts[$index]), 2);
+            $forecastMonths[$index]['income'] = $income;
+            $forecastMonths[$index]['expense'] = $expense;
+            $forecastMonths[$index]['net'] = round($income - $expense, 2);
+        }
+
+        if (($forecastMonths[0]['month_key'] ?? '') === '' && $nextMonthKey !== '') {
+            $forecastMonths[0]['month_key'] = $nextMonthKey;
+        }
+
+        return [
+            'next_month' => $forecastMonths[0],
+            'next_three_months' => $forecastMonths,
+        ];
+    }
+
+    private function forecastSeries(array $series, int $horizon): array
+    {
+        $count = count($series);
+        $series = array_values($series);
+
+        if ($count === 0) {
+            return array_fill(0, $horizon, 0.0);
+        }
+
+        if ($count === 1) {
+            return array_fill(0, $horizon, round((float) $series[0], 2));
+        }
+
+        $xValues = range(0, $count - 1);
+        $xMean = array_sum($xValues) / $count;
+        $yMean = array_sum($series) / $count;
+
+        $numerator = 0.0;
+        $denominator = 0.0;
+        foreach ($xValues as $index => $x) {
+            $numerator += ($x - $xMean) * ($series[$index] - $yMean);
+            $denominator += ($x - $xMean) ** 2;
+        }
+
+        $slope = $denominator > 0 ? $numerator / $denominator : 0.0;
+        $intercept = $yMean - ($slope * $xMean);
+
+        $forecasts = [];
+        for ($step = 1; $step <= $horizon; $step++) {
+            $x = $count - 1 + $step;
+            $forecasts[] = round($intercept + ($slope * $x), 2);
+        }
+
+        return $forecasts;
     }
 
     private function buildOllamaFallback(array $context): array
