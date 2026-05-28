@@ -68,8 +68,10 @@ const route = useRoute();
 const userStore = useUserStore();
 const isStudentProfile = computed(() => userStore.user?.profile_type === 'student');
 const selectedPeriod = computed<'monthly' | 'semester'>(() => (isStudentProfile.value ? 'semester' : 'monthly'));
+const showMonthFilter = computed(() => selectedPeriod.value !== 'semester');
 const semesters = ref<StudentSemester[]>([]);
 const selectedSemesterId = ref<number | null>(null);
+const filterGridClass = 'md:grid-cols-4';
 
 const clearFormErrors = () => Object.keys(errors).forEach((key) => { errors[key] = []; });
 const defaultTypeId = () => typeOptions.value[0]?.id ?? null;
@@ -447,8 +449,8 @@ watch(
 </script>
 
 <template>
-  <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
-    <div class="h-full w-full space-y-6">
+  <div class="min-h-screen w-full overflow-y-auto bg-slate-100 p-6">
+    <div class="min-h-full w-full space-y-6">
       <section class="w-full rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -578,16 +580,16 @@ watch(
       </Teleport>
 
       <div class="grid gap-6 lg:grid-cols-3">
-        <section class="overflow-hidden rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:col-span-2">
-          <div class="mb-4">
+        <section class="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:col-span-2">
+          <div class="mb-4 shrink-0">
             <h2 class="text-xl font-semibold text-slate-900">Recent Transactions</h2>
             <p class="text-sm text-slate-500">Track your latest finance records.</p>
-            <div class="mt-4 grid gap-3 md:grid-cols-5">
-              <select v-model="typeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
+            <div class="mt-4 grid gap-3" :class="filterGridClass">
+              <select v-model="typeFilter" class="min-w-0 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
                 <option value="all">All Types</option>
                 <option v-for="option in typeOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
               </select>
-              <select v-model="categoryFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
+              <select v-model="categoryFilter" class="min-w-0 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10">
                 <option value="all">All Categories</option>
                 <option value="__none__">No category</option>
                 <option v-for="option in categoryOptions" :key="option.id" :value="option.name">{{ option.name }}</option>
@@ -595,24 +597,30 @@ watch(
               <select
                 v-if="isStudentProfile"
                 v-model.number="selectedSemesterId"
-                class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10"
+                class="min-w-0 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10"
               >
                 <option v-if="!semesters.length" :value="null" disabled>No semester selected</option>
                 <option v-for="semester in sortedSemesters" :key="semester.id" :value="semester.id">
                   {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
                 </option>
               </select>
-              <input v-model="monthFilter" type="month" @change="handleMonthFilterChange" class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10" />
-              <input v-model.trim="descriptionSearch" type="text" class="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10" placeholder="Search description..." />
+              <input
+                v-if="showMonthFilter"
+                v-model="monthFilter"
+                type="month"
+                @change="handleMonthFilterChange"
+                class="min-w-0 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-slate-900/10"
+              />
+              <input v-model.trim="descriptionSearch" type="text" class="min-w-0 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-900/10" placeholder="Search description..." />
             </div>
           </div>
-          <div v-if="!isLoading" class="flex h-full flex-col">
+          <div v-if="!isLoading" class="flex min-h-0 flex-1 flex-col">
             <div v-if="transactions.length === 0" class="py-10 text-center text-slate-500">No transactions yet. Add one to
               start tracking.</div>
             <div v-else-if="filteredTransactions.length === 0" class="py-10 text-center text-slate-500">No matching transactions found.</div>
-            <div v-else class="flex flex-1 flex-col">
-              <div class="flex-1 overflow-hidden">
-                <div class="h-full overflow-x-auto">
+            <div v-else class="flex min-h-0 flex-1 flex-col">
+              <div class="flex-1 min-h-0">
+                <div class="h-full overflow-auto">
                   <table class="min-w-full border-collapse text-left">
                     <thead class="sticky top-0 z-10 border-b border-slate-200 bg-white">
                       <tr class="text-sm text-slate-600">
@@ -647,7 +655,7 @@ watch(
                   </table>
                 </div>
               </div>
-              <div v-if="totalPages > 1 && !hasActiveFilters" class="mt-4 flex items-center justify-between">
+              <div v-if="totalPages > 1 && !hasActiveFilters" class="mt-4 flex shrink-0 items-center justify-between">
                 <div class="text-sm text-slate-500">Showing {{ (currentPage - 1) * perPage + 1 }} to {{
                   Math.min(currentPage * perPage, totalTransactions) }} of {{ totalTransactions }} transactions</div>
                 <div class="flex items-center gap-2"><button @click="prevPage" :disabled="currentPage === 1"

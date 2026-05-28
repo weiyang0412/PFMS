@@ -238,19 +238,19 @@ const riskMeta = computed(() => {
       return {
         label: 'High risk',
         tone: 'border-rose-200 bg-rose-50 text-rose-700',
-        badge: 'bg-rose-500/15 text-rose-100 ring-1 ring-rose-400/30',
+        badge: 'bg-rose-500/15 text-rose-700 ring-1 ring-rose-400/30',
       };
     case 'medium':
       return {
         label: 'Moderate risk',
         tone: 'border-amber-200 bg-amber-50 text-amber-700',
-        badge: 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30',
+        badge: 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-400/30',
       };
     default:
       return {
         label: 'Low risk',
         tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        badge: 'bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/30',
+        badge: 'bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-400/30',
       };
   }
 });
@@ -302,7 +302,7 @@ const recommendationTone = (priority: AiRecommendation['priority']) => {
 
 const sourceLabel = computed(() => {
   if (aiInsights.value.source === 'ollama') {
-    return aiInsights.value.model ? `Local AI • ${aiInsights.value.model}` : 'Local AI';
+    return aiInsights.value.model ? `AI Model • ${aiInsights.value.model}` : 'Local AI';
   }
   return 'Heuristic fallback';
 });

@@ -23,10 +23,10 @@ class TransactionOptionController extends Controller
     public function storeType(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|in:income,expense',
+            'name' => 'required|string|max:100',
         ]);
 
-        $typeName = strtolower(trim($validated['name']));
+        $typeName = trim($validated['name']);
         $type = $request->user()->transactionTypes()->firstOrCreate([
             'name' => $typeName,
         ]);

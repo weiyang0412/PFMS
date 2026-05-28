@@ -29,6 +29,25 @@ class DashboardController extends Controller
             ? $this->resolveStudentSemester($request, $anchorMonth)
             : null;
 
+        $accountVersion = $user->accounts()->max('updated_at') ?: '';
+        $transactionVersion = $user->transactions()->max('updated_at') ?: '';
+        $semesterVersion = $periodType === 'semester'
+            ? ($user->studentSemesters()->max('updated_at') ?: '')
+            : '';
+        $summaryCacheKey = 'dashboard-summary:v3:' . $user->id . ':' . sha1(json_encode([
+            'period_type' => $periodType,
+            'month' => $anchorMonth->format('Y-m'),
+            'semester_id' => $selectedSemester ? $selectedSemester->id : null,
+            'account_version' => $accountVersion,
+            'transaction_version' => $transactionVersion,
+            'semester_version' => $semesterVersion,
+        ], JSON_THROW_ON_ERROR));
+
+        $cachedSummary = Cache::get($summaryCacheKey);
+        if (is_array($cachedSummary)) {
+            return response()->json($cachedSummary);
+        }
+
         [$currentStart, $currentEnd, $periodLabel] = $periodType === 'semester'
             ? $this->semesterRange($selectedSemester, $anchorMonth)
             : $this->monthRange($anchorMonth);
@@ -36,8 +55,20 @@ class DashboardController extends Controller
             ? $this->previousSemesterRange($currentStart, $currentEnd)
             : $this->previousMonthRange($anchorMonth);
 
-        $accounts = $user->accounts()->latest()->get();
+        $accounts = $user->accounts()
+            ->select(['id', 'name', 'balance', 'updated_at'])
+            ->latest()
+            ->get();
         $transactions = $user->transactions()
+            ->select([
+                'id',
+                'amount',
+                'description',
+                'transaction_date',
+                'transaction_type_id',
+                'transaction_category_id',
+                'updated_at',
+            ])
             ->with(['transactionType:id,name', 'transactionCategory:id,name'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
@@ -173,7 +204,7 @@ class DashboardController extends Controller
         });
         $aiInsights['forecast'] = $this->buildTrendForecast($monthlyTrend->values()->all(), $anchorMonth, $aiContext['period']['next_month_key']);
 
-        return response()->json([
+        $payload = [
             'overview' => $aiContext['overview'],
             'accounts' => $accounts->map(function ($account) {
                 return [
@@ -200,7 +231,11 @@ class DashboardController extends Controller
                 'month' => $anchorMonth->format('Y-m'),
                 'semester_id' => $selectedSemester ? $selectedSemester->id : null,
             ],
-        ]);
+        ];
+
+        Cache::put($summaryCacheKey, $payload, now()->addMinutes(5));
+
+        return response()->json($payload);
     }
 
     public function warmup(): \Illuminate\Http\Response

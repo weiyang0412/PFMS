@@ -209,6 +209,14 @@ onMounted(() => {
             </RouterLink>
           </li>
           <li>
+            <RouterLink to="/gamification" :class="sidebarItemClasses">
+              <svg :class="sidebarIconClasses" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h14v4a7 7 0 0 1-14 0V4Zm7 11v5m-4 0h8m-9-9H5a2 2 0 0 0 2 2h1m8-2h1a2 2 0 0 1-2 2m-4-3V4m0 11a7 7 0 0 1-7-7m7 7a7 7 0 0 0 7-7" />
+              </svg>
+              <span :class="sidebarLabelClasses">Gamification</span>
+            </RouterLink>
+          </li>
+          <li>
             <button
               type="button"
               :class="[sidebarItemClasses, 'w-full', isSettingsRoute ? 'border-cyan-300/30 bg-cyan-400/15 text-white shadow-[0_8px_24px_-10px_rgba(34,211,238,0.75)]' : '']"

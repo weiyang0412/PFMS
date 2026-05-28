@@ -101,17 +101,17 @@ class FinancialPdfExporter
 
     private function buildPages(array $report): array
     {
-        $summary = $report['summary'] ?? [];
         $transactions = $this->toArray($report['transactions'] ?? []);
         $pages = [
             [
                 'type' => 'cover',
                 'report' => $report,
-                'summary' => $summary,
+                'transactions' => array_slice($transactions, 0, 30),
             ],
         ];
 
-        foreach (array_chunk($transactions, 18) as $chunk) {
+        $remainingTransactions = array_slice($transactions, 30);
+        foreach (array_chunk($remainingTransactions, 30) as $chunk) {
             $pages[] = [
                 'type' => 'transactions',
                 'report' => $report,
@@ -129,12 +129,10 @@ class FinancialPdfExporter
 
         if (($page['type'] ?? '') === 'cover') {
             $stream .= $this->drawHeaderBand($page['report'] ?? []);
-            $stream .= $this->drawCoverSummary($page['report'] ?? [], $page['summary'] ?? []);
+            $stream .= $this->drawTransactionsTable($page['transactions'] ?? [], 36, 648, 30);
         } else {
-            $stream .= $this->drawSectionHeader('Transactions', 'A standardized export of your filtered records.', 36, 742);
-            $stream .= $this->drawTransactionsTable($page['transactions'] ?? [], 36, 688);
+            $stream .= $this->drawTransactionsTable($page['transactions'] ?? [], 36, 742, 30);
         }
-
         $stream .= $this->drawFooter($pageNumber, $pageCount);
         $stream .= "Q";
 
@@ -156,8 +154,8 @@ class FinancialPdfExporter
 
         $stream = '';
         $stream .= $this->drawRect(0, 670, self::PAGE_WIDTH, 172, self::COLOR_DARKER);
-        $stream .= $this->drawText(36, 792, 8, 'F1', 'FINANCIAL REPORT', self::COLOR_HEADER_MUTED);
-        $stream .= $this->drawText(36, 770, 20, 'F2', $this->escapePdfText((string) ($report['title'] ?? 'Monthly snapshot')), self::COLOR_HEADER_TEXT);
+        $stream .= $this->drawText(36, 792, 8, 'F1', 'TRANSACTION LIST', self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText(36, 770, 20, 'F2', 'Transactions', self::COLOR_HEADER_TEXT);
         $stream .= $this->drawText(36, 744, 10, 'F1', 'Period: ' . $period, self::COLOR_HEADER_MUTED);
         if ($isSemester) {
             $stream .= $this->drawText(36, 728, 9, 'F1', 'Range: ' . $range, self::COLOR_HEADER_MUTED);
@@ -189,49 +187,51 @@ class FinancialPdfExporter
             $x += 130;
         }
 
-        $stream .= $this->drawRoundedBox(36, 430, 252, 114, self::COLOR_PANEL);
-        $stream .= $this->drawBorderBox(36, 430, 252, 114, self::COLOR_BORDER);
-        $stream .= $this->drawText(50, 522, 8, 'F1', 'HIGHLIGHTS', self::COLOR_HEADER_MUTED);
-        $stream .= $this->drawText(50, 506, 13, 'F2', 'Key insights', self::COLOR_DARKER);
-        $stream .= $this->drawText(50, 486, 8, 'F1', 'Largest category', self::COLOR_MUTED);
-        $stream .= $this->drawText(170, 486, 10, 'F2', $this->limit($this->safeText((string) ($summary['largest_expense_category'] ?? '-')), 18), self::COLOR_DARK);
-        $stream .= $this->drawText(50, 468, 8, 'F1', 'Average expense', self::COLOR_MUTED);
-        $stream .= $this->drawText(170, 468, 10, 'F2', $this->formatAmount((float) ($summary['average_expense'] ?? 0)), self::COLOR_DARK);
-        $stream .= $this->drawText(50, 450, 8, 'F1', 'Net flow', self::COLOR_MUTED);
-        $stream .= $this->drawText(170, 450, 10, 'F2', $this->formatAmount((float) ($summary['net'] ?? 0)), self::COLOR_DARK);
-        $stream .= $this->drawText(50, 438, 8, 'F1', 'For personal analysis and tax filing.', self::COLOR_MUTED);
+        $stream .= $this->drawRoundedBox(36, 430, 512, 114, self::COLOR_PANEL);
+        $stream .= $this->drawBorderBox(36, 430, 512, 114, self::COLOR_BORDER);
+        $stream .= $this->drawText(50, 522, 8, 'F1', 'RECENT TRANSACTIONS', self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText(50, 506, 13, 'F2', 'Latest records', self::COLOR_DARKER);
 
-        $stream .= $this->drawRoundedBox(296, 430, 252, 114, self::COLOR_PANEL);
-        $stream .= $this->drawBorderBox(296, 430, 252, 114, self::COLOR_BORDER);
-        $stream .= $this->drawText(310, 522, 8, 'F1', 'EXPENSE MIX', self::COLOR_HEADER_MUTED);
-        $stream .= $this->drawText(310, 506, 13, 'F2', 'Top categories', self::COLOR_DARKER);
-        $categories = $this->toArray($report['category_breakdown'] ?? []);
-        $topCategories = array_slice($categories, 0, 4);
-        $topCategories = array_values($topCategories);
-        $y = 486;
-        $totalExpense = max(1, (float) ($summary['expense'] ?? 0));
-        if ($topCategories === []) {
-            $stream .= $this->drawText(310, 476, 10, 'F1', 'No category data for this period.', self::COLOR_MUTED);
-            $stream .= $this->drawText(310, 460, 8, 'F1', 'Try a different filter to see a breakdown.', self::COLOR_MUTED);
+        $transactions = $this->toArray($report['transactions'] ?? []);
+        $topTransactions = array_slice($transactions, 0, 4);
+        if ($topTransactions === []) {
+            $stream .= $this->drawText(50, 476, 10, 'F1', 'No transaction data for this period.', self::COLOR_MUTED);
+            $stream .= $this->drawText(50, 460, 8, 'F1', 'Add transactions to populate the list.', self::COLOR_MUTED);
 
             return $stream;
         }
 
-        foreach ($topCategories as $category) {
-            $amount = (float) ($category['amount'] ?? 0);
-            $label = $this->escapePdfText((string) ($category['category'] ?? 'Uncategorized'));
-            $barWidth = min(172, max(16, (int) round(($amount / $totalExpense) * 172)));
-            $stream .= $this->drawText(310, $y, 9, 'F1', $this->limit($label, 20), self::COLOR_DARK);
-            $stream .= $this->drawText(470, $y, 9, 'F1', $this->formatAmount($amount), self::COLOR_MUTED);
-            $stream .= $this->drawRoundedBox(310, $y - 10, 172, 5, self::COLOR_PANEL_SUBTLE);
-            $stream .= $this->drawRoundedBox(310, $y - 10, $barWidth, 5, self::COLOR_CYAN);
+        $tableX = 50;
+        $tableY = 486;
+        $dateX = $tableX;
+        $typeX = $tableX + 95;
+        $descriptionX = $tableX + 145;
+        $amountX = $tableX + 434;
+        $stream .= $this->drawText($dateX, $tableY, 8, 'F2', 'Date', self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText($typeX, $tableY, 8, 'F2', 'Type', self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText($descriptionX, $tableY, 8, 'F2', 'Description', self::COLOR_HEADER_MUTED);
+        $stream .= $this->drawText($amountX, $tableY, 8, 'F2', 'Amount', self::COLOR_HEADER_MUTED);
+
+        $y = 470;
+        foreach ($topTransactions as $transaction) {
+            $type = strtolower((string) ($transaction['type'] ?? ''));
+            $typeColor = $type === 'income' ? self::COLOR_EMERALD : self::COLOR_ROSE;
+            $date = $this->formatDateLabel((string) ($transaction['transaction_date'] ?? ''));
+            $description = $this->limit($this->safeText((string) ($transaction['description'] ?? '')), 24);
+            $amount = $this->formatAmount((float) ($transaction['amount'] ?? 0));
+
+            $stream .= $this->drawText($dateX, $y, 8, 'F1', $date, self::COLOR_MUTED);
+            $stream .= $this->drawText($typeX, $y, 8, 'F2', strtoupper($type === 'income' ? 'IN' : 'OUT'), $typeColor);
+            $stream .= $this->drawText($descriptionX, $y, 9, 'F1', $description, self::COLOR_DARK);
+            $stream .= $this->drawText($amountX, $y, 9, 'F1', $amount, $typeColor);
+            $stream .= $this->drawBorderLine($tableX, $y - 8, 472, 12, self::COLOR_BORDER);
             $y -= 22;
         }
 
         return $stream;
     }
 
-    private function drawTransactionsTable(array $transactions, float $x, float $y): string
+    private function drawTransactionsTable(array $transactions, float $x, float $y, int $maxRows = 18): string
     {
         $stream = '';
         $rowHeight = 18;
@@ -251,7 +251,7 @@ class FinancialPdfExporter
         $stream .= $this->drawText($amountX, $tableY + 7, 8, 'F2', 'Amount', self::COLOR_HEADER_TEXT);
 
         $currentY = $tableY - 18;
-        foreach (array_slice($transactions, 0, 18) as $index => $transaction) {
+        foreach (array_slice($transactions, 0, $maxRows) as $index => $transaction) {
             $fill = $index % 2 === 0 ? self::COLOR_PANEL_SUBTLE : self::COLOR_PANEL;
             $stream .= $this->drawRect($x, $currentY - 4, $tableWidth, $rowHeight, $fill);
             $stream .= $this->drawBorderLine($x, $currentY - 4, $tableWidth, $rowHeight, self::COLOR_BORDER);

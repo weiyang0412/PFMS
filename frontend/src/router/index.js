@@ -13,6 +13,7 @@ import Budgets from '../views/Budgets.vue'
 import FinancialTrend from '../views/FinancialTrend.vue'
 import FinancialSummary from '../views/FinancialSummary.vue'
 import AIInsights from '../views/AIInsights.vue'
+import Gamification from '../views/Gamification.vue'
 import { useUserStore } from '../stores/userStore'
 
 const router = createRouter({
@@ -104,6 +105,12 @@ const router = createRouter({
             path: "/ai-insights",
             name: "ai-insights",
             component: AIInsights,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/gamification",
+            name: "gamification",
+            component: Gamification,
             meta: { requiresAuth: true },
         },
     ],

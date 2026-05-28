@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\FinancialReportController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GamificationController;
 use App\Http\Controllers\StudentSemesterController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionOptionController;
@@ -36,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
     Route::post('/dashboard/warmup', [DashboardController::class, 'warmup']);
+    Route::get('/gamification/summary', [GamificationController::class, 'summary']);
     Route::get('/reports/financial', [FinancialReportController::class, 'index']);
     Route::get('/reports/financial/export', [FinancialReportController::class, 'export']);
 
