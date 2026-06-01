@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../../lib/axios';
+import SemesterPicker from '../../components/SemesterPicker.vue';
 import { useUserStore } from '../../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm } from '../../lib/formatters.js';
 
@@ -295,16 +296,13 @@ watch(
                 Semester
               </button>
             </div>
-            <select
+            <SemesterPicker
               v-if="isStudentProfile && periodType === 'semester' && hasSemesters"
-              v-model.number="selectedSemesterId"
+              v-model="selectedSemesterId"
+              :semesters="sortedSemesters"
+              label="Semester"
               @change="refreshAll"
-              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
-            >
-                <option v-for="semester in sortedSemesters" :key="semester.id" :value="semester.id">
-                  {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
-                </option>
-              </select>
+            />
             <div
               v-if="showNoSemesterSelected"
               class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white inline-flex items-center"

@@ -371,16 +371,16 @@ watch(
     <div class="space-y-6">
       <section class="rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+          <div class="min-w-0 flex-1">
             <p class="text-sm uppercase tracking-[0.28em] text-slate-400">Budget & Alerts</p>
             <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Control monthly spending</h1>
-            <p class="mt-2 text-sm text-slate-300">Set monthly category budgets and get warning alerts before overspending.</p>
+            <p class="mt-2 whitespace-nowrap text-sm text-slate-300">Set monthly category budgets and get warning alerts before overspending.</p>
           </div>
-          <div class="flex flex-wrap items-center gap-3">
-            <div v-if="isStudentProfile" class="inline-flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
+          <div class="flex flex-wrap items-center gap-2 lg:flex-none">
+            <div v-if="isStudentProfile" class="inline-flex flex-none items-center gap-1 rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
               <button
                 type="button"
-                class="h-10 rounded-lg px-3 text-sm font-medium transition"
+                class="h-9 rounded-lg px-2.5 text-xs font-medium transition sm:text-sm"
                 :class="periodType === 'monthly' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
                 @click="periodType = 'monthly'; selectedSemesterId = null"
               >
@@ -389,42 +389,42 @@ watch(
               <button
                 v-if="isStudentProfile"
                 type="button"
-                class="h-10 rounded-lg px-3 text-sm font-medium transition"
+                class="h-9 rounded-lg px-2.5 text-xs font-medium transition sm:text-sm"
                 :class="periodType === 'semester' ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/15'"
                 @click="periodType = 'semester'"
               >
                 Semester
               </button>
             </div>
-            <div class="inline-flex items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
-              <button type="button" @click="shiftPeriod(-1)" :disabled="!canShiftPrev" class="h-10 rounded-md px-3 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed">
+            <div class="inline-flex flex-none items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
+              <button type="button" @click="shiftPeriod(-1)" :disabled="!canShiftPrev" class="h-9 rounded-md px-2.5 text-xs font-medium text-white/90 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm">
                 Prev
               </button>
-              <input v-if="periodType === 'monthly'" v-model="month" type="month" class="mx-1 h-10 rounded-md border border-white/20 bg-slate-900/50 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/40" />
-              <div v-else class="mx-1 flex h-10 min-w-[280px] items-center rounded-md border border-white/20 bg-slate-900/50 px-3 text-sm text-white">
+              <input v-if="periodType === 'monthly'" v-model="month" type="month" class="mx-1 h-9 w-[160px] rounded-md border border-white/20 bg-slate-900/50 px-2 text-xs text-white focus:ring-2 focus:ring-cyan-500/40 sm:w-[170px] sm:text-sm" />
+              <div v-else class="mx-1 flex h-9 min-w-[240px] items-center rounded-md border border-white/20 bg-slate-900/50 px-2 text-xs text-white sm:min-w-[280px] sm:text-sm">
                 {{ selectedSemesterLabel }}
               </div>
-              <button type="button" @click="shiftPeriod(1)" :disabled="!canShiftNext" class="h-10 rounded-md px-3 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="button" @click="shiftPeriod(1)" :disabled="!canShiftNext" class="h-9 rounded-md px-2.5 text-xs font-medium text-white/90 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm">
                 Next
               </button>
             </div>
-            <div class="inline-flex items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
-              <div class="mx-1 flex h-10 items-center gap-2 rounded-md border border-white/20 bg-slate-900/50 px-3">
-                <span class="text-xs text-slate-300">Default Alert %</span>
-                <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-14 rounded-md border border-white/20 bg-slate-900/70 px-2 py-1 text-sm text-white" @change="persistDefaultThreshold" />
+            <div class="inline-flex flex-none items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm">
+              <div class="mx-1 flex h-9 items-center gap-1.5 rounded-md border border-white/20 bg-slate-900/50 px-2">
+                <span class="text-[11px] text-slate-300 sm:text-xs">Default Alert %</span>
+                <input v-model.number="defaultAlertThreshold" type="number" min="1" max="100" class="h-7 w-12 rounded-md border border-white/20 bg-slate-900/70 px-1.5 py-1 text-xs text-white sm:w-14 sm:text-sm" @change="persistDefaultThreshold" />
               </div>
               <button
                 type="button"
                 @click="saveAllBudgets"
                 :disabled="isLoading || isBulkSaving || periodType === 'semester' || saveableItems.length === 0"
-                class="rounded-md border border-cyan-300/40 bg-cyan-500/15 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-60"
+                class="rounded-md border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-medium text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-60 sm:text-sm"
               >
                 {{ isBulkSaving ? 'Saving All...' : 'Save All' }}
               </button>
-              <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying || periodType === 'semester'" class="rounded-md px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/15 disabled:opacity-60">
+              <button type="button" @click="copyPreviousMonth" :disabled="isLoading || isCopying || periodType === 'semester'" class="rounded-md px-3 py-2 text-xs font-medium text-white/90 hover:bg-white/15 disabled:opacity-60 sm:text-sm">
                 {{ isCopying ? 'Copying...' : 'Copy Prev Month' }}
               </button>
-              <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-lg border border-white/15 bg-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/25 disabled:opacity-60">
+              <button type="button" @click="loadBudgets" :disabled="isLoading" class="rounded-lg border border-white/15 bg-white/15 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/25 disabled:opacity-60 sm:text-sm">
                 {{ isLoading ? 'Loading...' : 'Load' }}
               </button>
             </div>

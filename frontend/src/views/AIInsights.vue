@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../lib/axios';
+import SemesterPicker from '../components/SemesterPicker.vue';
 import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, formatYmdDate, malaysiaCurrentMonthYm } from '../lib/formatters.js';
 
@@ -135,6 +136,34 @@ const aiInsights = computed(() => summary.value?.ai_insights ?? defaultAiInsight
 const nextForecast = computed(() => aiInsights.value.forecast?.next_month ?? defaultAiInsights.forecast.next_month);
 const forecastPath = computed(() => aiInsights.value.forecast?.next_three_months ?? []);
 const recommendations = computed(() => aiInsights.value.recommendations ?? []);
+const transactionContext = computed(() => {
+  const count = aiInsights.value.signals.transaction_count;
+  if (count <= 0) return 'Add transactions to unlock stronger forecasts.';
+  if (count === 1) return 'Based on 1 transaction in the selected period.';
+  return `Based on ${count} transactions in the selected period.`;
+});
+const nextStep = computed(() => {
+  const projectedNet = nextForecast.value.net;
+
+  if (projectedNet < 0) {
+    return {
+      label: 'Protect cashflow',
+      detail: `Projected shortfall of ${money(Math.abs(projectedNet))}. Trim discretionary spending or delay non-urgent purchases.`,
+    };
+  }
+
+  if (projectedNet > 0) {
+    return {
+      label: 'Use the surplus',
+      detail: `Projected surplus of ${money(projectedNet)}. Consider saving it or setting aside part of it for emergencies.`,
+    };
+  }
+
+  return {
+    label: 'Stay balanced',
+    detail: 'Projected cashflow is neutral. Keep spending steady and watch for category spikes.',
+  };
+});
 
 const money = (value = 0) => formatCurrencyMYR(value);
 const shortDate = (value = '') => formatYmdDate(value, { locale: 'en-MY', fallback: '-' });
@@ -368,16 +397,16 @@ watch(
   <div class="h-full w-full overflow-hidden bg-slate-100 p-6">
     <div class="space-y-6">
       <section class="w-full rounded-[32px] bg-slate-950 px-6 py-8 text-white shadow-2xl shadow-slate-900/10">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div class="max-w-3xl">
             <p class="text-sm uppercase tracking-[0.28em] text-slate-400">AI Insights &amp; Predictions</p>
             <h1 class="mt-2 text-3xl font-semibold sm:text-4xl">Personalized recommendations from your transaction patterns</h1>
             <p class="mt-2 text-sm text-slate-300">
-              Local AI analysis highlights spending pressure, expected cashflow, and the next action you can take before the month closes.
+              Local AI analysis highlights spending pressure, expected cashflow, and the most useful next move before the period closes.
             </p>
           </div>
-            <div class="flex items-center gap-3">
-              <div v-if="isStudentProfile" class="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/10 p-0.5 shadow-sm">
+          <div class="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
+            <div v-if="isStudentProfile" class="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/10 p-0.5 shadow-sm">
               <button
                 type="button"
                 class="mx-0.5 my-0.5 h-[calc(100%-4px)] rounded-md px-3 text-sm font-medium transition"
@@ -395,16 +424,13 @@ watch(
                 Semester
               </button>
             </div>
-            <select
+            <SemesterPicker
               v-if="isStudentProfile && periodType === 'semester'"
-              v-model.number="selectedSemesterId"
+              v-model="selectedSemesterId"
+              :semesters="studentSemesters"
+              label="Semester"
               @change="loadInsights(true)"
-              class="h-10 rounded-xl border border-white/20 bg-slate-900/60 px-3 text-sm text-white focus:ring-2 focus:ring-cyan-500/30"
-            >
-              <option v-for="semester in studentSemesters" :key="semester.id" :value="semester.id">
-                {{ semester.name }} ({{ longDate(semester.start_date) }} to {{ longDate(semester.end_date) }})
-              </option>
-            </select>
+            />
             <button
               type="button"
               @click="loadInsights(true)"
@@ -417,9 +443,9 @@ watch(
           </div>
         </div>
 
-        <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <article :class="['rounded-[24px] border p-5', riskMeta.tone]">
-            <p class="text-sm font-medium uppercase tracking-[0.25em]">Risk</p>
+        <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+            <article :class="['rounded-[24px] border p-5', riskMeta.tone]">
+              <p class="text-sm font-medium uppercase tracking-[0.25em]">Risk</p>
             <div class="mt-3 flex items-center justify-between gap-3">
               <div>
                 <p class="text-2xl font-semibold">{{ riskMeta.label }}</p>
@@ -429,11 +455,16 @@ watch(
               <span :class="['rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]', riskMeta.badge]">
                 AI
               </span>
-            </div>
-          </article>
-          <article class="rounded-[24px] border border-white/10 bg-white/5 p-5">
-            <p class="text-sm text-slate-300">Next month income</p>
-            <p class="mt-3 text-2xl font-semibold text-emerald-300">{{ money(nextForecast.income) }}</p>
+              </div>
+            </article>
+            <article class="rounded-[24px] border border-white/10 bg-white/5 p-5">
+              <p class="text-sm text-slate-300">Next best step</p>
+              <p class="mt-3 text-2xl font-semibold text-white">{{ nextStep.label }}</p>
+              <p class="mt-2 text-sm leading-6 text-slate-300">{{ nextStep.detail }}</p>
+            </article>
+            <article class="rounded-[24px] border border-white/10 bg-white/5 p-5">
+              <p class="text-sm text-slate-300">Next month income</p>
+              <p class="mt-3 text-2xl font-semibold text-emerald-300">{{ money(nextForecast.income) }}</p>
             <p class="mt-2 text-xs text-slate-400">{{ nextForecast.month }}</p>
           </article>
           <article class="rounded-[24px] border border-white/10 bg-white/5 p-5">
@@ -452,7 +483,8 @@ watch(
 
         <div class="mt-6 rounded-[28px] border border-white/10 bg-white/5 p-5">
           <p class="text-xs uppercase tracking-[0.25em] text-cyan-200/70">AI Summary</p>
-          <p class="mt-2 text-lg text-white">{{ aiInsights.summary }}</p>
+          <p class="mt-2 max-w-4xl text-lg leading-7 text-white">{{ aiInsights.summary }}</p>
+          <p class="mt-3 text-sm text-cyan-100/80">{{ transactionContext }}</p>
         </div>
       </section>
 
@@ -461,7 +493,7 @@ watch(
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Forecast Path</p>
-              <h2 class="mt-1 text-2xl font-semibold text-slate-900">Three month projection</h2>
+              <h2 class="mt-1 text-2xl font-semibold text-slate-900">What the next three months may look like</h2>
             </div>
             <span class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">
               {{ period.label }}
@@ -490,14 +522,14 @@ watch(
             </div>
           </div>
           <p v-else class="mt-5 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-            Add more transactions to unlock a more reliable forecast path.
+            Add more transactions to make this forecast more reliable.
           </p>
         </article>
 
         <article class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
           <div>
             <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Recommendations</p>
-            <h2 class="mt-1 text-2xl font-semibold text-slate-900">What to do next</h2>
+            <h2 class="mt-1 text-2xl font-semibold text-slate-900">Suggested actions</h2>
           </div>
           <div v-if="recommendations.length" class="mt-5 space-y-3">
             <div
@@ -515,14 +547,14 @@ watch(
             </div>
           </div>
           <p v-else class="mt-5 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-            No recommendation yet. Add transactions to generate personalized suggestions.
+            No recommendation yet. Add more transactions to generate personalized suggestions.
           </p>
         </article>
 
         <article class="rounded-[28px] bg-slate-900 p-6 text-white shadow-sm xl:col-span-2">
           <div>
             <p class="text-sm uppercase tracking-[0.25em] text-slate-400">Signals</p>
-            <h2 class="mt-1 text-2xl font-semibold">Behavior snapshot</h2>
+            <h2 class="mt-1 text-2xl font-semibold">Why this insight?</h2>
           </div>
           <div class="mt-5 space-y-3">
             <div v-for="signal in signalRows" :key="signal.label" class="rounded-2xl bg-white/5 p-4">

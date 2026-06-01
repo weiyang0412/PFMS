@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import axiosInstance from '../lib/axios';
 import { useUserStore } from '../stores/userStore';
 import { formatCurrencyMYR, malaysiaCurrentMonthYm } from '../lib/formatters.js';
@@ -114,8 +114,16 @@ const loadError = ref('');
 const summary = ref<GamificationSummary | null>(null);
 const periodType = ref<'monthly' | 'semester'>('monthly');
 const selectedMonth = ref(malaysiaCurrentMonthYm());
+const isMonthPickerOpen = ref(false);
+const monthPickerYear = ref(Number(malaysiaCurrentMonthYm().slice(0, 4)));
+const isSemesterPickerOpen = ref(false);
+const semesterPickerYear = ref(Number(malaysiaCurrentMonthYm().slice(0, 4)));
 const studentSemesters = ref<StudentSemester[]>([]);
 const selectedSemesterId = ref<number | null>(null);
+const monthPickerRef = ref<HTMLElement | null>(null);
+const semesterPickerRef = ref<HTMLElement | null>(null);
+
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const longDate = (value = '') => {
   if (!value) return '-';
@@ -129,6 +137,17 @@ const longDate = (value = '') => {
 };
 
 const money = (value = 0) => formatCurrencyMYR(value);
+const formatMonthDisplay = (monthYm: string) => {
+  if (!monthYm || !/^\d{4}-\d{2}$/.test(monthYm)) return 'Select month';
+  const [year, month] = monthYm.split('-').map(Number);
+  const monthName = new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(new Date(Date.UTC(year, month - 1, 1)));
+  return `${monthName}, ${year}`;
+};
+const semesterRangeLabel = (semester: StudentSemester) => {
+  const start = longDate(semester.start_date);
+  const end = longDate(semester.end_date);
+  return `${semester.name} (${start} to ${end})`;
+};
 const safeSummary = computed(() => summary.value ?? defaultSummary);
 const profile = computed(() => safeSummary.value.profile);
 const badges = computed(() => safeSummary.value.badges ?? []);
@@ -138,6 +157,33 @@ const pointsBreakdown = computed(() => safeSummary.value.points_breakdown ?? [])
 const earnedBadges = computed(() => badges.value.filter((badge) => badge.earned));
 const completedChallenges = computed(() => challenges.value.filter((challenge) => challenge.completed));
 const nextReward = computed(() => rewards.value.find((reward) => !reward.unlocked) ?? null);
+const lockedRewards = computed(() => rewards.value.filter((reward) => !reward.unlocked));
+const bestPointsSource = computed(() => [...pointsBreakdown.value].sort((a, b) => Number(b.points) - Number(a.points))[0] ?? null);
+const streakLabel = computed(() => {
+  const days = Number(profile.value.streak_days) || 0;
+  return `${days} ${days === 1 ? 'Day' : 'Days'}`;
+});
+const pointsToNextReward = computed(() => {
+  if (!nextReward.value?.threshold && nextReward.value?.threshold !== 0) return null;
+  return Math.max(0, Number(nextReward.value.threshold) - Number(profile.value.points));
+});
+const selectedMonthLabel = computed(() => formatMonthDisplay(selectedMonth.value));
+const selectedSemesterLabel = computed(() => {
+  const semester = studentSemesters.value.find((item) => item.id === selectedSemesterId.value);
+  return semester ? semesterRangeLabel(semester) : 'Select semester';
+});
+const rewardMomentum = computed(() => {
+  if (!nextReward.value) {
+    return 'You have unlocked every visible reward for this period.';
+  }
+
+  const remaining = pointsToNextReward.value ?? 0;
+  if (remaining === 0) {
+    return `You are ready to unlock ${nextReward.value.title}.`;
+  }
+
+  return `You need ${remaining} more points to unlock ${nextReward.value.title}.`;
+});
 
 const sortedSemesters = computed(() =>
   [...studentSemesters.value].sort((a, b) => {
@@ -146,6 +192,14 @@ const sortedSemesters = computed(() =>
     return aTime - bTime;
   }),
 );
+const semesterPickerYears = computed(() => {
+  const years = [...new Set(sortedSemesters.value.map((semester) => new Date(`${semester.start_date}T00:00:00`).getUTCFullYear()))];
+  return years.length ? years.sort((a, b) => a - b) : [semesterPickerYear.value];
+});
+const semesterPickerOptions = computed(() =>
+  sortedSemesters.value.filter((semester) => new Date(`${semester.start_date}T00:00:00`).getUTCFullYear() === semesterPickerYear.value),
+);
+const semesterPickerYearIndex = computed(() => semesterPickerYears.value.findIndex((year) => year === semesterPickerYear.value));
 
 const semesterMatchesMonth = (semester: StudentSemester, monthYm: string) => {
   if (!monthYm || !/^\d{4}-\d{2}$/.test(monthYm)) return false;
@@ -165,7 +219,7 @@ const semesterForMonth = (monthYm: string) =>
 const buildParams = () => {
   const params: Record<string, string | number> = {
     period: periodType.value,
-    month: selectedMonth.value,
+    month: selectedMonth.value || malaysiaCurrentMonthYm(),
   };
 
   if (periodType.value === 'semester' && selectedSemesterId.value) {
@@ -216,29 +270,147 @@ const loadSummary = async (manualRefresh = false) => {
 const selectPeriodType = (value: 'monthly' | 'semester') => {
   periodType.value = value;
   if (value === 'semester') {
-    selectedSemesterId.value = semesterForMonth(selectedMonth.value);
+    selectedSemesterId.value = semesterForMonth(selectedMonth.value || malaysiaCurrentMonthYm());
+    const currentSemester = studentSemesters.value.find((semester) => semester.id === selectedSemesterId.value);
+    semesterPickerYear.value = currentSemester
+      ? new Date(`${currentSemester.start_date}T00:00:00`).getUTCFullYear()
+      : semesterPickerYears.value[0] ?? semesterPickerYear.value;
   } else {
     selectedSemesterId.value = null;
   }
+  isMonthPickerOpen.value = false;
+  isSemesterPickerOpen.value = false;
   void loadSummary(true);
 };
 
-const handleMonthChange = (event: Event) => {
-  const value = (event.target as HTMLInputElement).value;
-  selectedMonth.value = value || malaysiaCurrentMonthYm();
+const openMonthPicker = () => {
+  if (periodType.value !== 'monthly') return;
+  monthPickerYear.value = selectedMonth.value ? Number(selectedMonth.value.slice(0, 4)) : Number(malaysiaCurrentMonthYm().slice(0, 4));
+  isMonthPickerOpen.value = !isMonthPickerOpen.value;
+  isSemesterPickerOpen.value = false;
+};
+
+const closeMonthPicker = () => {
+  isMonthPickerOpen.value = false;
+};
+
+const openSemesterPicker = () => {
+  if (periodType.value !== 'semester') return;
+  const currentSemester = studentSemesters.value.find((semester) => semester.id === selectedSemesterId.value);
+  const currentYear = currentSemester
+    ? new Date(`${currentSemester.start_date}T00:00:00`).getUTCFullYear()
+    : semesterPickerYears.value[0] ?? Number(malaysiaCurrentMonthYm().slice(0, 4));
+  semesterPickerYear.value = currentYear;
+  isSemesterPickerOpen.value = !isSemesterPickerOpen.value;
+  isMonthPickerOpen.value = false;
+};
+
+const closeSemesterPicker = () => {
+  isSemesterPickerOpen.value = false;
+};
+
+const selectMonth = (monthIndex: number) => {
+  const nextMonth = `${monthPickerYear.value}-${String(monthIndex + 1).padStart(2, '0')}`;
+  selectedMonth.value = nextMonth;
   if (periodType.value === 'semester') {
-    selectedSemesterId.value = semesterForMonth(selectedMonth.value);
+    selectedSemesterId.value = semesterForMonth(nextMonth);
   }
+  isMonthPickerOpen.value = false;
   void loadSummary(true);
 };
 
-const selectSemester = (semesterId: number) => {
-  selectedSemesterId.value = semesterId;
-  periodType.value = 'semester';
+const shiftMonthPickerYear = (delta: number) => {
+  monthPickerYear.value += delta;
+};
+
+const shiftSemesterPickerYear = (delta: number) => {
+  const currentIndex = semesterPickerYears.value.findIndex((year) => year === semesterPickerYear.value);
+  if (currentIndex === -1) {
+    semesterPickerYear.value += delta;
+    return;
+  }
+
+  const nextIndex = Math.max(0, Math.min(semesterPickerYears.value.length - 1, currentIndex + delta));
+  semesterPickerYear.value = semesterPickerYears.value[nextIndex];
+};
+
+const clearMonthSelection = () => {
+  selectedMonth.value = '';
+  isMonthPickerOpen.value = false;
   void loadSummary(true);
 };
+
+const setThisMonth = () => {
+  const currentMonth = malaysiaCurrentMonthYm();
+  selectedMonth.value = currentMonth;
+  monthPickerYear.value = Number(currentMonth.slice(0, 4));
+  if (periodType.value === 'semester') {
+    selectedSemesterId.value = semesterForMonth(currentMonth);
+  }
+  isMonthPickerOpen.value = false;
+  void loadSummary(true);
+};
+
+const selectSemester = (semester: StudentSemester) => {
+  selectedSemesterId.value = semester.id;
+  semesterPickerYear.value = new Date(`${semester.start_date}T00:00:00`).getUTCFullYear();
+  isSemesterPickerOpen.value = false;
+  void loadSummary(true);
+};
+
+const clearSemesterSelection = () => {
+  selectedSemesterId.value = null;
+  isSemesterPickerOpen.value = false;
+  void loadSummary(true);
+};
+
+const setCurrentSemester = () => {
+  const currentSemesterId = semesterForMonth(malaysiaCurrentMonthYm());
+  if (currentSemesterId) {
+    const currentSemester = studentSemesters.value.find((semester) => semester.id === currentSemesterId);
+    selectedSemesterId.value = currentSemesterId;
+    if (currentSemester) {
+      semesterPickerYear.value = new Date(`${currentSemester.start_date}T00:00:00`).getUTCFullYear();
+    }
+  }
+  isSemesterPickerOpen.value = false;
+  void loadSummary(true);
+};
+
+watch(selectedMonth, (next) => {
+  if (next && /^\d{4}-\d{2}$/.test(next)) {
+    monthPickerYear.value = Number(next.slice(0, 4));
+  }
+});
+
+watch(periodType, (next) => {
+  if (next !== 'monthly') {
+    isMonthPickerOpen.value = false;
+  }
+  if (next !== 'semester') {
+    isSemesterPickerOpen.value = false;
+  }
+});
+
+watch(selectedSemesterId, (next) => {
+  if (!next) return;
+  const semester = studentSemesters.value.find((item) => item.id === next);
+  if (!semester) return;
+  semesterPickerYear.value = new Date(`${semester.start_date}T00:00:00`).getUTCFullYear();
+});
 
 const formatProgress = (value = 0) => `${Math.max(0, Math.min(100, Number(value))).toFixed(1)}%`;
+const badgeStatusLabel = (earned: boolean) => (earned ? 'Unlocked' : 'In progress');
+const challengeStatusLabel = (status: GamificationChallenge['status']) => {
+  if (status === 'completed') return 'Completed';
+  if (status === 'active') return 'Active';
+  return 'Locked';
+};
+const challengeStatusHint = (challenge: GamificationChallenge) => {
+  if (challenge.completed) return 'Completed for this period.';
+  if (challenge.status === 'active') return `Earn ${challenge.reward_points} points by finishing this quest.`;
+  return 'Not available yet.';
+};
 
 const badgeTone = (earned: boolean) => {
   return earned
@@ -258,16 +430,45 @@ const rewardTone = (unlocked: boolean) => {
     : 'border-slate-200 bg-slate-50 text-slate-800';
 };
 
+const handleOutsideClick = (event: PointerEvent) => {
+  const target = event.target as Node;
+  const monthPickerEl = monthPickerRef.value;
+  const semesterPickerEl = semesterPickerRef.value;
+
+  if (!monthPickerEl?.contains(target) && !semesterPickerEl?.contains(target)) {
+    closeMonthPicker();
+    closeSemesterPicker();
+  }
+};
+
 onMounted(() => {
   periodType.value = isStudentProfile.value ? ((userStore.user?.preferred_period as 'monthly' | 'semester') || 'monthly') : 'monthly';
+  isLoading.value = true;
   void loadStudentSemesters().finally(() => {
     if (periodType.value === 'semester') {
-      selectedSemesterId.value = semesterForMonth(selectedMonth.value);
+      selectedSemesterId.value = semesterForMonth(selectedMonth.value || malaysiaCurrentMonthYm());
     }
-    void loadSummary();
   });
+  void loadSummary();
+  document.addEventListener('pointerdown', handleOutsideClick);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsideClick);
 });
 </script>
+
+<style scoped>
+.loading-fade-enter-active,
+.loading-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.loading-fade-enter-from,
+.loading-fade-leave-to {
+  opacity: 0;
+}
+</style>
 
 <template>
   <div class="min-h-screen bg-slate-100 p-6">
@@ -292,7 +493,7 @@ onMounted(() => {
             </div>
             <div class="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
               <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Streak</p>
-              <p class="mt-1 text-2xl font-semibold">{{ profile.streak_days }}d</p>
+              <p class="mt-1 text-2xl font-semibold">{{ streakLabel }}</p>
             </div>
           </div>
         </div>
@@ -349,15 +550,124 @@ onMounted(() => {
                 Semester
               </button>
             </div>
-            <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
-              <span class="text-sm text-slate-400">Month</span>
-              <input
-                :value="selectedMonth"
-                type="month"
-                class="border-0 bg-transparent p-0 text-sm font-medium text-white focus:ring-0"
-                @change="handleMonthChange"
-              />
-            </label>
+            <div v-if="periodType === 'monthly'" ref="monthPickerRef" class="relative">
+              <button
+                type="button"
+                class="flex min-w-[270px] items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left transition hover:bg-white/10"
+                @click.stop="openMonthPicker"
+              >
+                <span class="text-sm text-slate-400">Month</span>
+                <span class="text-sm font-medium text-white">{{ selectedMonthLabel }}</span>
+                <span class="text-slate-400">▾</span>
+              </button>
+
+              <div
+                v-if="isMonthPickerOpen"
+                class="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[320px] rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-2xl"
+              >
+                <div class="flex items-center justify-between rounded-xl bg-slate-100 px-3 py-2 text-slate-800">
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-sm font-semibold text-slate-800 hover:bg-white/80"
+                    @click="shiftMonthPickerYear(-1)"
+                  >
+                    Prev
+                  </button>
+                  <p class="text-sm font-semibold text-slate-800">{{ monthPickerYear }}</p>
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-sm font-semibold text-slate-800 hover:bg-white/80"
+                    @click="shiftMonthPickerYear(1)"
+                  >
+                    Next
+                  </button>
+                </div>
+
+                <div class="mt-4 grid grid-cols-4 gap-2">
+                  <button
+                    v-for="(month, index) in monthNames"
+                    :key="month"
+                    type="button"
+                    class="rounded-xl px-2 py-3 text-sm font-medium transition"
+                    :class="selectedMonth === `${monthPickerYear}-${String(index + 1).padStart(2, '0')}` ? 'bg-cyan-500 text-white ring-2 ring-cyan-600' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'"
+                    @click="selectMonth(index)"
+                  >
+                    {{ month }}
+                  </button>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between text-sm">
+                  <button type="button" class="font-medium text-slate-800 hover:text-slate-950" @click="clearMonthSelection">
+                    Clear
+                  </button>
+                  <button type="button" class="font-medium text-slate-800 hover:text-slate-950" @click="setThisMonth">
+                    This month
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="isStudentProfile" ref="semesterPickerRef" class="relative">
+              <button
+                type="button"
+                class="flex min-w-[270px] items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left transition hover:bg-white/10"
+                @click.stop="openSemesterPicker"
+              >
+                <span class="text-sm text-slate-400">Semester</span>
+                <span class="text-sm font-medium text-white">{{ selectedSemesterLabel }}</span>
+                <span class="text-slate-400">▾</span>
+              </button>
+
+              <div
+                v-if="isSemesterPickerOpen"
+                class="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[360px] rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-2xl"
+              >
+                <div class="flex items-center justify-between rounded-xl bg-slate-100 px-3 py-2 text-slate-800">
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-sm font-semibold text-slate-800 hover:bg-white/80 disabled:opacity-40"
+                    :disabled="semesterPickerYearIndex === 0 && semesterPickerYears.length > 0"
+                    @click="shiftSemesterPickerYear(-1)"
+                  >
+                    Prev
+                  </button>
+                  <p class="text-sm font-semibold text-slate-800">{{ semesterPickerYear }}</p>
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-sm font-semibold text-slate-800 hover:bg-white/80 disabled:opacity-40"
+                    :disabled="semesterPickerYears.length > 0 && semesterPickerYearIndex === semesterPickerYears.length - 1"
+                    @click="shiftSemesterPickerYear(1)"
+                  >
+                    Next
+                  </button>
+                </div>
+
+                <div v-if="semesterPickerOptions.length" class="mt-4 grid gap-2">
+                  <button
+                    v-for="semester in semesterPickerOptions"
+                    :key="semester.id"
+                    type="button"
+                    class="rounded-xl px-3 py-3 text-left text-sm font-medium transition"
+                    :class="selectedSemesterId === semester.id ? 'bg-cyan-500 text-white ring-2 ring-cyan-600' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'"
+                    @click="selectSemester(semester)"
+                  >
+                    <span class="block font-semibold">{{ semester.name }}</span>
+                    <span class="mt-1 block text-xs opacity-80">{{ semesterRangeLabel(semester) }}</span>
+                  </button>
+                </div>
+                <div v-else class="mt-4 rounded-xl bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                  No semester found for this year.
+                </div>
+
+                <div class="mt-4 flex items-center justify-between text-sm">
+                  <button type="button" class="font-medium text-slate-800 hover:text-slate-950" @click="clearSemesterSelection">
+                    Clear
+                  </button>
+                  <button type="button" class="font-medium text-slate-800 hover:text-slate-950" @click="setCurrentSemester">
+                    Current semester
+                  </button>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
               class="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -369,17 +679,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="isStudentProfile && periodType === 'semester' && sortedSemesters.length" class="mt-5 flex flex-wrap gap-2">
-          <button
-            v-for="semester in sortedSemesters"
-            :key="semester.id"
-            type="button"
-            class="rounded-full border px-4 py-2 text-sm transition"
-            :class="semester.id === selectedSemesterId ? 'border-cyan-300/30 bg-cyan-400/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'"
-            @click="selectSemester(semester.id)"
-          >
-            {{ semester.name }}
-          </button>
+        <div v-if="isStudentProfile && periodType === 'semester' && sortedSemesters.length" class="mt-5 text-sm text-slate-400">
+          Pick a semester from the dropdown above to refresh the module.
         </div>
       </section>
 
@@ -389,7 +690,7 @@ onMounted(() => {
 
       <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div class="rounded-[28px] bg-white p-5 shadow-sm">
-          <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-700">Points Breakdown</p>
               <h2 class="mt-2 text-2xl font-semibold text-slate-950">How your score is built</h2>
@@ -397,12 +698,7 @@ onMounted(() => {
             <p class="text-sm text-slate-500">{{ pointsBreakdown.length }} bonus sources</p>
           </div>
 
-          <div v-if="isLoading" class="mt-6 space-y-3">
-            <div class="h-20 animate-pulse rounded-2xl bg-slate-100"></div>
-            <div class="h-20 animate-pulse rounded-2xl bg-slate-100"></div>
-            <div class="h-20 animate-pulse rounded-2xl bg-slate-100"></div>
-          </div>
-          <div v-else class="mt-6 space-y-3">
+          <div class="mt-6 space-y-3">
             <div
               v-for="item in pointsBreakdown"
               :key="item.code"
@@ -413,8 +709,11 @@ onMounted(() => {
                   <p class="font-semibold text-slate-950">{{ item.label }}</p>
                   <p class="mt-1 text-sm text-slate-500">{{ item.detail }}</p>
                 </div>
-                <div class="rounded-full bg-slate-950 px-3 py-1 text-sm font-semibold text-white">
-                  +{{ item.points }}
+                <div class="text-right">
+                  <div class="rounded-full bg-slate-950 px-3 py-1 text-sm font-semibold text-white">
+                    +{{ item.points }}
+                  </div>
+                  <p class="mt-2 text-xs text-slate-500">Contribution</p>
                 </div>
               </div>
             </div>
@@ -431,19 +730,35 @@ onMounted(() => {
             <p class="mt-2 text-sm leading-6 text-slate-300">
               {{ nextReward?.description ?? 'You have unlocked every visible milestone for this period.' }}
             </p>
-            <div v-if="nextReward" class="mt-4 inline-flex rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-sm text-cyan-100">
-              Unlock at {{ nextReward.threshold }} points
+            <div v-if="nextReward" class="mt-4 flex flex-wrap gap-2">
+              <div class="inline-flex rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-sm text-cyan-100">
+                Unlock at {{ nextReward.threshold }} points
+              </div>
+              <div class="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-white">
+                {{ pointsToNextReward }} points left
+              </div>
             </div>
+            <p class="mt-4 text-sm leading-6 text-slate-300">
+              {{ rewardMomentum }}
+            </p>
+            <p v-if="bestPointsSource" class="mt-3 text-sm text-cyan-100/90">
+              Fastest current source: {{ bestPointsSource.label }} (+{{ bestPointsSource.points }} pts)
+            </p>
+            <p v-else class="mt-3 text-sm text-cyan-100/90">
+              Add more transactions to unlock a stronger reward path.
+            </p>
           </div>
 
           <div class="mt-5 grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <p class="text-sm text-slate-500">Badges earned</p>
               <p class="mt-1 text-2xl font-semibold text-slate-950">{{ earnedBadges.length }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ badges.length - earnedBadges.length }} left to unlock</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <p class="text-sm text-slate-500">Challenges cleared</p>
               <p class="mt-1 text-2xl font-semibold text-slate-950">{{ completedChallenges.length }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ challenges.length - completedChallenges.length }} still in play</p>
             </div>
           </div>
         </div>
@@ -489,8 +804,11 @@ onMounted(() => {
 
             <div class="mt-4 flex items-center justify-between text-sm">
               <span>{{ formatProgress(badge.progress) }}</span>
-              <span>{{ badge.earned ? `Earned ${longDate(badge.earned_at || '')}` : 'In progress' }}</span>
+              <span>{{ badge.earned ? `Earned ${longDate(badge.earned_at || '')}` : 'Keep going' }}</span>
             </div>
+            <p class="mt-2 text-sm leading-6 opacity-80">
+              {{ badge.earned ? 'Target reached. This badge is now part of your profile.' : 'Progress is still building. Keep adding the behaviour that this badge measures.' }}
+            </p>
           </article>
         </div>
       </section>
@@ -515,7 +833,7 @@ onMounted(() => {
               <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div class="inline-flex rounded-full border border-current/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em]">
-                    {{ challenge.status }}
+                    {{ challengeStatusLabel(challenge.status) }}
                   </div>
                   <h3 class="mt-3 text-xl font-semibold">{{ challenge.title }}</h3>
                   <p class="mt-2 text-sm leading-6 opacity-90">{{ challenge.description }}</p>
@@ -524,6 +842,7 @@ onMounted(() => {
                 <div class="rounded-2xl bg-white/10 px-4 py-3 text-right backdrop-blur">
                   <p class="text-xs uppercase tracking-[0.2em] opacity-70">Reward</p>
                   <p class="text-lg font-semibold">{{ challenge.reward_label }}</p>
+                  <p class="mt-1 text-xs opacity-70">+{{ challenge.reward_points }} points</p>
                 </div>
               </div>
 
@@ -538,6 +857,7 @@ onMounted(() => {
                   :style="{ width: formatProgress(challenge.progress) }"
                 ></div>
               </div>
+              <p class="mt-3 text-sm leading-6 opacity-80">{{ challengeStatusHint(challenge) }}</p>
             </article>
           </div>
         </div>
@@ -549,7 +869,7 @@ onMounted(() => {
                 <p class="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-700">Rewards</p>
                 <h2 class="mt-2 text-2xl font-semibold text-slate-950">Milestone track</h2>
               </div>
-              <p class="text-sm text-slate-500">Level {{ profile.level }} track</p>
+              <p class="text-sm text-slate-500">{{ rewards.length - lockedRewards.length }} unlocked, {{ lockedRewards.length }} locked</p>
             </div>
 
             <div class="mt-6 space-y-3">
@@ -570,6 +890,9 @@ onMounted(() => {
                 </div>
                 <p v-if="reward.threshold !== null" class="mt-3 text-sm opacity-80">
                   Threshold: {{ reward.threshold }} points
+                </p>
+                <p class="mt-2 text-sm leading-6 opacity-80">
+                  {{ reward.unlocked ? 'Ready to claim and use right away.' : 'Keep going to make this available.' }}
                 </p>
               </article>
             </div>
@@ -595,4 +918,18 @@ onMounted(() => {
       </section>
     </div>
   </div>
+
+  <Teleport to="body">
+    <Transition name="loading-fade">
+      <div v-if="isLoading" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 px-4">
+        <div class="flex w-full max-w-xs flex-col items-center rounded-2xl bg-white px-6 py-7 text-center shadow-2xl">
+          <div class="relative mb-4 h-12 w-12">
+            <span class="absolute inset-0 rounded-full border-4 border-slate-200"></span>
+            <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-cyan-500 border-r-blue-600"></span>
+          </div>
+          <p class="text-lg font-semibold text-slate-900">Loading ...</p>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
