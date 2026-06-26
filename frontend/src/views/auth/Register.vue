@@ -65,6 +65,7 @@ const register = async (payload: RegisterForm) => {
         <div class="flex h-full items-center justify-center px-4">
             <form
                 @submit.prevent="register(form)"
+                novalidate
                 class="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-900/80 p-7 shadow-[0_20px_60px_-20px_rgba(8,47,73,0.75)] backdrop-blur-md"
             >
                 <div class="mb-6">

@@ -82,7 +82,7 @@ const login = async (payload: LoginForm) => {
                         </span>
                     </template>
                 </div>
-            <div class="mb-5">
+                <div class="mb-5">
                 <label for="password"
                     class="mb-2 block text-sm font-medium text-slate-100">Password</label>
                 <div class="relative">
@@ -117,6 +117,11 @@ const login = async (payload: LoginForm) => {
                         {{ error }}
                     </span>
                 </template>
+                <div class="mt-2 text-right">
+                    <RouterLink to="/forgot-password" class="text-xs font-medium text-cyan-300 transition hover:text-cyan-200">
+                        Forgot your password?
+                    </RouterLink>
+                </div>
             </div>
                 <button
                     type="submit"

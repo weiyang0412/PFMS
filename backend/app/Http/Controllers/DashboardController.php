@@ -34,7 +34,7 @@ class DashboardController extends Controller
         $semesterVersion = $periodType === 'semester'
             ? ($user->studentSemesters()->max('updated_at') ?: '')
             : '';
-        $summaryCacheKey = 'dashboard-summary:v3:' . $user->id . ':' . sha1(json_encode([
+        $summaryCacheKey = 'dashboard-summary:v4:' . $user->id . ':' . sha1(json_encode([
             'period_type' => $periodType,
             'month' => $anchorMonth->format('Y-m'),
             'semester_id' => $selectedSemester ? $selectedSemester->id : null,
@@ -186,7 +186,7 @@ class DashboardController extends Controller
                 'savings_rate' => $savingsRate,
             ],
         ];
-        $aiCacheKey = 'ai-insights:v4:' . $user->id . ':' . sha1(json_encode([
+        $aiCacheKey = 'ai-insights:v5:' . $user->id . ':' . sha1(json_encode([
             'period_type' => $periodType,
             'month' => $anchorMonth->format('Y-m'),
             'semester_id' => $selectedSemester ? $selectedSemester->id : null,
@@ -198,10 +198,18 @@ class DashboardController extends Controller
             'savings_rate' => $savingsRate,
         ], JSON_THROW_ON_ERROR));
 
-        $aiInsights = Cache::remember($aiCacheKey, now()->addMinutes(10), function () use ($aiContext) {
-            return $this->ollamaFinancialInsightsService->generate($aiContext)
-                ?? $this->buildOllamaFallback($aiContext);
-        });
+        $aiInsights = Cache::get($aiCacheKey);
+        if (! is_array($aiInsights)) {
+            $generatedAiInsights = $this->ollamaFinancialInsightsService->generate($aiContext);
+
+            if (is_array($generatedAiInsights)) {
+                $aiInsights = $generatedAiInsights;
+                Cache::put($aiCacheKey, $aiInsights, now()->addMinutes(10));
+            } else {
+                $aiInsights = $this->buildOllamaFallback($aiContext);
+                Cache::put($aiCacheKey, $aiInsights, now()->addMinute());
+            }
+        }
         $aiInsights['forecast'] = $this->buildTrendForecast($monthlyTrend->values()->all(), $anchorMonth, $aiContext['period']['next_month_key']);
 
         $payload = [

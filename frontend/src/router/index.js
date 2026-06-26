@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import Register from '../views/auth/Register.vue'
 import Login from '../views/auth/Login.vue'
+import ForgotPassword from '../views/auth/ForgotPassword.vue'
+import ResetPassword from '../views/auth/ResetPassword.vue'
 import Dashboard from '../views/auth/Dashboard.vue'
 import Accounts from '../views/Accounts.vue'
 import Transactions from '../views/Transactions.vue'
@@ -35,6 +37,18 @@ const router = createRouter({
             path: "/login",
             name: "login",
             component: Login,
+            meta: { noSidebar: true, guestOnly: true },
+        },
+        {
+            path: "/forgot-password",
+            name: "forgot-password",
+            component: ForgotPassword,
+            meta: { noSidebar: true, guestOnly: true },
+        },
+        {
+            path: "/reset-password",
+            name: "reset-password",
+            component: ResetPassword,
             meta: { noSidebar: true, guestOnly: true },
         },
         {
