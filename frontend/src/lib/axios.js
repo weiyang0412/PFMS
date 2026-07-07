@@ -34,6 +34,17 @@ function getXsrfToken() {
     return getCookie('XSRF-TOKEN');
 }
 
+axiosInstance.interceptors.request.use((config) => {
+    const xsrfToken = getXsrfToken();
+
+    if (xsrfToken) {
+        config.headers = config.headers ?? {};
+        config.headers['X-XSRF-TOKEN'] = xsrfToken;
+    }
+
+    return config;
+});
+
 export async function refreshCsrfCookie() {
     await axiosInstance.get('/sanctum/csrf-cookie', {
         baseURL: apiRootUrl,
