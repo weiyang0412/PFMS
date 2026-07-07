@@ -28,9 +28,7 @@ const userStore = useUserStore();
 
 const login = async (payload: LoginForm) => {
     isLoading.value = true;
-    await axiosInstance.get('/sanctum/csrf-cookie', {
-        baseURL: 'http://localhost:8000',
-    });
+    await axiosInstance.get('/sanctum/csrf-cookie');
     errors.email = [];
     errors.password = [];
     try {
@@ -149,6 +147,5 @@ const login = async (payload: LoginForm) => {
         </Transition>
     </div>
 </template>
-
 
 

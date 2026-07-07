@@ -33,9 +33,7 @@ const userStore = useUserStore();
 
 const register = async (payload: RegisterForm) => {
     isLoading.value = true;
-    await axiosInstance.get('/sanctum/csrf-cookie', {
-        baseURL: 'http://localhost:8000',
-    });
+    await axiosInstance.get('/sanctum/csrf-cookie');
     errors.name = [];
     errors.email = [];
     errors.password = [];
@@ -202,6 +200,5 @@ const register = async (payload: RegisterForm) => {
         </Transition>
     </div>
 </template>
-
 
 

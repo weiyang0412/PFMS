@@ -31,9 +31,7 @@ const resetPassword = async () => {
     errors.password = [];
 
     try {
-        await axiosInstance.get('/sanctum/csrf-cookie', {
-            baseURL: 'http://localhost:8000',
-        });
+        await axiosInstance.get('/sanctum/csrf-cookie');
         const response = await axiosInstance.post('/reset-password', form);
         status.value = response.data?.status || 'Password updated successfully.';
         setTimeout(() => {

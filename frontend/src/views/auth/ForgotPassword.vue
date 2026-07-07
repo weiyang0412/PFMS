@@ -21,9 +21,7 @@ const sendResetLink = async () => {
     errors.email = [];
 
     try {
-        await axiosInstance.get('/sanctum/csrf-cookie', {
-            baseURL: 'http://localhost:8000',
-        });
+        await axiosInstance.get('/sanctum/csrf-cookie');
         const response = await axiosInstance.post('/forgot-password', form);
         status.value = response.data?.status || 'Password reset link sent.';
     } catch (e) {
