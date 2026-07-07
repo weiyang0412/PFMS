@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AxiosError } from 'axios';
-import axiosInstance, { refreshCsrfCookie } from '../../lib/axios';
+import axiosInstance, { csrfHeaders, refreshCsrfCookie } from '../../lib/axios';
 import { reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
@@ -22,7 +22,9 @@ const sendResetLink = async () => {
 
     try {
         await refreshCsrfCookie();
-        const response = await axiosInstance.post('/forgot-password', form);
+        const response = await axiosInstance.post('/forgot-password', form, {
+            headers: csrfHeaders(),
+        });
         status.value = response.data?.status || 'Password reset link sent.';
     } catch (e) {
         if (e instanceof AxiosError && e.response?.status === 422) {

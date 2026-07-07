@@ -7,7 +7,7 @@
  * }} User
  */
 import { defineStore } from 'pinia'
-import axiosInstance from '@/lib/axios'
+import axiosInstance, { csrfHeaders } from '@/lib/axios'
 
 export const useUserStore = defineStore('user', {
     state: () => ({
@@ -42,7 +42,9 @@ export const useUserStore = defineStore('user', {
 
         async logout() {
             try {
-                await axiosInstance.post('/logout')
+                await axiosInstance.post('/logout', {}, {
+                    headers: csrfHeaders(),
+                })
                 this.user = null
                 this.isAuthenticated = false
                 this.authChecked = true

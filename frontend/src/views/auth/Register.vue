@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AxiosError } from 'axios';
-import axiosInstance, { refreshCsrfCookie } from '../../lib/axios';
+import axiosInstance, { csrfHeaders, refreshCsrfCookie } from '../../lib/axios';
 import { reactive, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { useUserStore } from '../../stores/userStore';
@@ -38,7 +38,9 @@ const register = async (payload: RegisterForm) => {
     errors.email = [];
     errors.password = [];
     try {
-        await axiosInstance.post('/register', payload);
+        await axiosInstance.post('/register', payload, {
+            headers: csrfHeaders(),
+        });
         await userStore.fetchUser();
         router.push('/dashboard');
     } catch (e) {
