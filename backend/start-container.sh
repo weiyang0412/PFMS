@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+export DB_HOST="${DB_HOST:-${MYSQLHOST:-}}"
+export DB_PORT="${DB_PORT:-${MYSQLPORT:-}}"
+export DB_DATABASE="${DB_DATABASE:-${MYSQLDATABASE:-}}"
+export DB_USERNAME="${DB_USERNAME:-${MYSQLUSER:-}}"
+export DB_PASSWORD="${DB_PASSWORD:-${MYSQLPASSWORD:-}}"
+
 wait_for_db() {
     if [ -z "${DB_HOST:-}" ] || [ -z "${DB_PORT:-}" ]; then
         echo "DB_HOST or DB_PORT is missing; skipping database wait."
