@@ -15,6 +15,7 @@ fi
 export SESSION_DRIVER="${SESSION_DRIVER:-database}"
 export SESSION_SECURE_COOKIE="${SESSION_SECURE_COOKIE:-true}"
 export SESSION_SAME_SITE="${SESSION_SAME_SITE:-none}"
+export SESSION_DOMAIN=""
 
 mkdir -p /app/storage/framework/cache/data \
     /app/storage/framework/sessions \
