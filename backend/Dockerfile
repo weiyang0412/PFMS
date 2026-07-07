@@ -27,9 +27,11 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY . /app
+COPY start-container.sh /usr/local/bin/start-container
+RUN chmod +x /usr/local/bin/start-container
 
 RUN composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "php artisan migrate --force --seed && php artisan serve --host=0.0.0.0 --port=${PORT:-8000}"]
+ENTRYPOINT ["/usr/local/bin/start-container"]
