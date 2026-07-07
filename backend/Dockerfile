@@ -29,6 +29,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . /app
 COPY start-container.sh /usr/local/bin/start-container
 RUN chmod +x /usr/local/bin/start-container
+RUN mkdir -p /app/storage/framework/cache/data \
+    /app/storage/framework/sessions \
+    /app/storage/framework/views \
+    /app/storage/logs \
+    && chmod -R 775 /app/storage /app/bootstrap/cache
 
 RUN composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 

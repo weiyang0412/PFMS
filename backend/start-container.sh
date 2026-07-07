@@ -12,6 +12,13 @@ if [ -z "${APP_KEY:-}" ]; then
     export APP_KEY="$(php -r 'echo "base64:".base64_encode(random_bytes(32));')"
 fi
 
+mkdir -p /app/storage/framework/cache/data \
+    /app/storage/framework/sessions \
+    /app/storage/framework/views \
+    /app/storage/logs
+
+chmod -R 775 /app/storage /app/bootstrap/cache 2>/dev/null || true
+
 wait_for_db() {
     if [ -z "${DB_HOST:-}" ] || [ -z "${DB_PORT:-}" ]; then
         echo "DB_HOST or DB_PORT is missing; skipping database wait."
