@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AxiosError } from 'axios';
-import axiosInstance, { apiRootUrl } from '../../lib/axios';
+import axiosInstance, { refreshCsrfCookie } from '../../lib/axios';
 import { reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
@@ -21,7 +21,7 @@ const sendResetLink = async () => {
     errors.email = [];
 
     try {
-        await axiosInstance.get('/sanctum/csrf-cookie', { baseURL: apiRootUrl });
+        await refreshCsrfCookie();
         const response = await axiosInstance.post('/forgot-password', form);
         status.value = response.data?.status || 'Password reset link sent.';
     } catch (e) {
