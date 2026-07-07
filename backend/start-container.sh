@@ -7,6 +7,11 @@ export DB_DATABASE="${DB_DATABASE:-${MYSQLDATABASE:-}}"
 export DB_USERNAME="${DB_USERNAME:-${MYSQLUSER:-}}"
 export DB_PASSWORD="${DB_PASSWORD:-${MYSQLPASSWORD:-}}"
 
+if [ -z "${APP_KEY:-}" ]; then
+    echo "APP_KEY is missing; generating a runtime key."
+    export APP_KEY="$(php -r 'echo "base64:".base64_encode(random_bytes(32));')"
+fi
+
 wait_for_db() {
     if [ -z "${DB_HOST:-}" ] || [ -z "${DB_PORT:-}" ]; then
         echo "DB_HOST or DB_PORT is missing; skipping database wait."
