@@ -7,6 +7,7 @@ use App\Models\NotificationPreference;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class NotificationPreferenceController extends Controller
@@ -38,7 +39,24 @@ class NotificationPreferenceController extends Controller
     {
         $user = $request->user();
         $payload = $this->buildCurrentMonthPayload($user);
-        Mail::to($user->email)->send(new FinancialReportMail($payload));
+
+        try {
+            Mail::to($user->email)->send(new FinancialReportMail($payload));
+        } catch (\Throwable $e) {
+            Log::error('Failed to send financial report test email.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'mail_host' => config('mail.mailers.smtp.host'),
+                'mail_port' => config('mail.mailers.smtp.port'),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Email send failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
 
         return response()->json(['message' => 'Report email sent.']);
     }
@@ -61,7 +79,23 @@ class NotificationPreferenceController extends Controller
             'alerts' => $alerts->values()->all(),
         ];
 
-        Mail::to($user->email)->send(new \App\Mail\BudgetAlertMail($payload));
+        try {
+            Mail::to($user->email)->send(new \App\Mail\BudgetAlertMail($payload));
+        } catch (\Throwable $e) {
+            Log::error('Failed to send budget alert test email.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'mail_host' => config('mail.mailers.smtp.host'),
+                'mail_port' => config('mail.mailers.smtp.port'),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Email send failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
 
         return response()->json(['message' => 'Budget alert email sent.']);
     }
