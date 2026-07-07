@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AxiosError } from 'axios';
-import axiosInstance from '../../lib/axios';
+import axiosInstance, { apiRootUrl } from '../../lib/axios';
 import { reactive, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { useUserStore } from '../../stores/userStore';
@@ -33,7 +33,7 @@ const userStore = useUserStore();
 
 const register = async (payload: RegisterForm) => {
     isLoading.value = true;
-    await axiosInstance.get('/sanctum/csrf-cookie');
+    await axiosInstance.get('/sanctum/csrf-cookie', { baseURL: apiRootUrl });
     errors.name = [];
     errors.email = [];
     errors.password = [];
@@ -200,5 +200,4 @@ const register = async (payload: RegisterForm) => {
         </Transition>
     </div>
 </template>
-
 

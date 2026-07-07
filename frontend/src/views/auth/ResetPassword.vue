@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AxiosError } from 'axios';
-import axiosInstance from '../../lib/axios';
+import axiosInstance, { apiRootUrl } from '../../lib/axios';
 import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter, RouterLink } from 'vue-router';
 
@@ -31,7 +31,7 @@ const resetPassword = async () => {
     errors.password = [];
 
     try {
-        await axiosInstance.get('/sanctum/csrf-cookie');
+        await axiosInstance.get('/sanctum/csrf-cookie', { baseURL: apiRootUrl });
         const response = await axiosInstance.post('/reset-password', form);
         status.value = response.data?.status || 'Password updated successfully.';
         setTimeout(() => {
