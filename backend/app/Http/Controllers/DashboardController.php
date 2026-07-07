@@ -34,7 +34,7 @@ class DashboardController extends Controller
         $semesterVersion = $periodType === 'semester'
             ? ($user->studentSemesters()->max('updated_at') ?: '')
             : '';
-        $summaryCacheKey = 'dashboard-summary:v4:' . $user->id . ':' . sha1(json_encode([
+        $summaryCacheKey = 'dashboard-summary:v5:' . $user->id . ':' . sha1(json_encode([
             'period_type' => $periodType,
             'month' => $anchorMonth->format('Y-m'),
             'semester_id' => $selectedSemester ? $selectedSemester->id : null,
@@ -186,7 +186,7 @@ class DashboardController extends Controller
                 'savings_rate' => $savingsRate,
             ],
         ];
-        $aiCacheKey = 'ai-insights:v5:' . $user->id . ':' . sha1(json_encode([
+        $aiCacheKey = 'ai-insights:v6:' . $user->id . ':' . sha1(json_encode([
             'period_type' => $periodType,
             'month' => $anchorMonth->format('Y-m'),
             'semester_id' => $selectedSemester ? $selectedSemester->id : null,
@@ -207,7 +207,7 @@ class DashboardController extends Controller
                 Cache::put($aiCacheKey, $aiInsights, now()->addMinutes(10));
             } else {
                 $aiInsights = $this->buildOllamaFallback($aiContext);
-                Cache::put($aiCacheKey, $aiInsights, now()->addMinute());
+                Cache::put($aiCacheKey, $aiInsights, now()->addSeconds(15));
             }
         }
         $aiInsights['forecast'] = $this->buildTrendForecast($monthlyTrend->values()->all(), $anchorMonth, $aiContext['period']['next_month_key']);
