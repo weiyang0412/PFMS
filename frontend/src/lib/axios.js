@@ -7,6 +7,10 @@ const axiosInstance = axios.create({
     baseURL: apiBaseUrl,
     withCredentials: true,
     withXSRFToken: true,
+    headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    },
 });
 
 export { apiBaseUrl, apiRootUrl };
