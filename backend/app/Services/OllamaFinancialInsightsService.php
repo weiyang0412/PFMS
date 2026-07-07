@@ -46,6 +46,52 @@ class OllamaFinancialInsightsService
         }
     }
 
+    public function healthCheck(): array
+    {
+        $baseUrl = rtrim((string) config('ollama.base_url', ''), '/');
+        $model = (string) config('ollama.model', 'llama3.2:3b');
+
+        if ($baseUrl === '' || $model === '') {
+            return [
+                'ok' => false,
+                'reason' => 'missing_config',
+                'base_url' => $baseUrl,
+                'model' => $model,
+            ];
+        }
+
+        try {
+            $response = Http::timeout(5)
+                ->acceptJson()
+                ->post($baseUrl . '/api/chat', [
+                    'model' => $model,
+                    'stream' => false,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => 'Reply with OK only.',
+                        ],
+                    ],
+                ]);
+
+            return [
+                'ok' => $response->successful(),
+                'reason' => $response->successful() ? 'ok' : 'http_' . $response->status(),
+                'base_url' => $baseUrl,
+                'model' => $model,
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return [
+                'ok' => false,
+                'reason' => class_basename($e),
+                'base_url' => $baseUrl,
+                'model' => $model,
+            ];
+        }
+    }
+
     public function generate(array $context): ?array
     {
         $baseUrl = rtrim((string) config('ollama.base_url', ''), '/');
@@ -56,40 +102,37 @@ class OllamaFinancialInsightsService
         }
 
         $timeout = (int) config('ollama.timeout', 45);
-        $schema = $this->outputSchema($context, $model);
 
         try {
-            $response = Http::timeout($timeout)
-                ->acceptJson()
-                ->post($baseUrl . '/api/chat', [
-                    'model' => $model,
-                    'stream' => false,
-                    'format' => $schema,
-                    'options' => [
-                        'temperature' => 0.2,
+            $payload = [
+                'model' => $model,
+                'stream' => false,
+                'options' => [
+                    'temperature' => 0.2,
+                ],
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => $this->buildSystemPrompt(),
                     ],
-                    'messages' => [
-                        [
-                            'role' => 'system',
-                            'content' => $this->buildSystemPrompt(),
-                        ],
-                        [
-                            'role' => 'user',
-                            'content' => $this->buildUserPrompt($context, $schema),
-                        ],
+                    [
+                        'role' => 'user',
+                        'content' => $this->buildUserPrompt($context),
                     ],
-                ]);
+                ],
+            ];
 
-            if (! $response->successful()) {
+            $responseJson = $this->postJson($baseUrl . '/api/chat', $payload, $timeout);
+            if (! is_array($responseJson)) {
                 return null;
             }
 
-            $content = data_get($response->json(), 'message.content');
+            $content = data_get($responseJson, 'message.content');
             if (! is_string($content) || trim($content) === '') {
                 return null;
             }
 
-            $decoded = json_decode($content, true);
+            $decoded = $this->decodeModelJson($content);
             if (! is_array($decoded)) {
                 return null;
             }
@@ -113,78 +156,17 @@ class OllamaFinancialInsightsService
         ]);
     }
 
-    private function buildUserPrompt(array $context, array $schema): string
+    private function buildUserPrompt(array $context): string
     {
         return json_encode([
             'task' => 'Analyze the user financial snapshot and produce insights and short-term predictions.',
-            'output_schema' => $schema,
+            'response_requirements' => [
+                'Return JSON only.',
+                'Use these top-level keys: source, model, risk_level, confidence, summary, signals, forecast, recommendations.',
+                'Keep recommendations practical and concise.',
+            ],
             'context' => $context,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    }
-
-    private function outputSchema(array $context, string $model): array
-    {
-        $fallback = $this->buildFallback($context, $model);
-
-        return [
-            'type' => 'object',
-            'properties' => [
-                'source' => ['type' => 'string'],
-                'model' => ['type' => 'string'],
-                'risk_level' => ['type' => 'string', 'enum' => ['low', 'medium', 'high']],
-                'confidence' => ['type' => 'integer'],
-                'summary' => ['type' => 'string'],
-                'signals' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'income_trend' => ['type' => 'string', 'enum' => ['up', 'down', 'stable']],
-                        'expense_trend' => ['type' => 'string', 'enum' => ['up', 'down', 'stable']],
-                        'largest_expense_category' => ['type' => ['string', 'null']],
-                        'largest_expense_amount' => ['type' => 'number'],
-                        'largest_expense_share' => ['type' => 'number'],
-                        'transaction_count' => ['type' => 'integer'],
-                        'savings_rate' => ['type' => 'number'],
-                    ],
-                ],
-                'forecast' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'next_month' => $this->forecastPointSchema($fallback['forecast']['next_month']),
-                        'next_three_months' => [
-                            'type' => 'array',
-                            'items' => $this->forecastPointSchema($fallback['forecast']['next_month']),
-                        ],
-                    ],
-                ],
-                'recommendations' => [
-                    'type' => 'array',
-                    'items' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'title' => ['type' => 'string'],
-                            'detail' => ['type' => 'string'],
-                            'priority' => ['type' => 'string', 'enum' => ['low', 'medium', 'high']],
-                        ],
-                    ],
-                ],
-            ],
-            'required' => ['source', 'model', 'risk_level', 'confidence', 'summary', 'signals', 'forecast', 'recommendations'],
-        ];
-    }
-
-    private function forecastPointSchema(array $fallback): array
-    {
-        return [
-            'type' => 'object',
-            'properties' => [
-                'month' => ['type' => 'string'],
-                'month_key' => ['type' => 'string'],
-                'income' => ['type' => 'number'],
-                'expense' => ['type' => 'number'],
-                'net' => ['type' => 'number'],
-            ],
-            'required' => ['month', 'month_key', 'income', 'expense', 'net'],
-        ];
     }
 
     private function normalize(array $decoded, array $context, string $model): array
@@ -333,5 +315,84 @@ class OllamaFinancialInsightsService
         $value = str_replace(['US$', '$'], 'RM ', $value);
 
         return preg_replace('/\s+/', ' ', trim($value)) ?? $value;
+    }
+
+    private function postJson(string $url, array $payload, int $timeout): ?array
+    {
+        if (! function_exists('curl_init')) {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->post($url, $payload);
+
+            return $response->successful() ? $response->json() : null;
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            return null;
+        }
+
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ];
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => min(5, $timeout),
+        ]);
+
+        $body = curl_exec($ch);
+        if ($body === false) {
+            report(new \RuntimeException(curl_error($ch) ?: 'Unknown cURL error'));
+            curl_close($ch);
+
+            return null;
+        }
+
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($status < 200 || $status >= 300) {
+            return null;
+        }
+
+        $decoded = json_decode($body, true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function decodeModelJson(string $content): ?array
+    {
+        $content = trim($content);
+        if ($content === '') {
+            return null;
+        }
+
+        $decoded = json_decode($content, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        if (preg_match('/\{.*\}/s', $content, $matches) === 1) {
+            $decoded = json_decode($matches[0], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        if (str_starts_with($content, '```')) {
+            $content = preg_replace('/^```(?:json)?\s*/', '', $content) ?? $content;
+            $content = preg_replace('/\s*```$/', '', $content) ?? $content;
+            $decoded = json_decode(trim($content), true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 }

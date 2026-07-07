@@ -483,7 +483,7 @@ watch(
 
         <div class="mt-6 rounded-[28px] border border-white/10 bg-white/5 p-5">
           <p class="text-xs uppercase tracking-[0.25em] text-cyan-200/70">AI Summary</p>
-          <p class="mt-2 max-w-4xl text-lg leading-7 text-white">{{ aiInsights.summary }}</p>
+          <p class="mt-2 w-full max-w-none text-lg leading-7 text-white">{{ aiInsights.summary }}</p>
           <p class="mt-3 text-sm text-cyan-100/80">{{ transactionContext }}</p>
         </div>
       </section>
