@@ -12,12 +12,18 @@ if [ -z "${APP_KEY:-}" ]; then
     export APP_KEY="$(php -r 'echo "base64:".base64_encode(random_bytes(32));')"
 fi
 
+export SESSION_DRIVER="${SESSION_DRIVER:-database}"
+export SESSION_SECURE_COOKIE="${SESSION_SECURE_COOKIE:-true}"
+export SESSION_SAME_SITE="${SESSION_SAME_SITE:-none}"
+
 mkdir -p /app/storage/framework/cache/data \
     /app/storage/framework/sessions \
     /app/storage/framework/views \
     /app/storage/logs
 
 chmod -R 775 /app/storage /app/bootstrap/cache 2>/dev/null || true
+
+php artisan optimize:clear >/dev/null 2>&1 || true
 
 wait_for_db() {
     if [ -z "${DB_HOST:-}" ] || [ -z "${DB_PORT:-}" ]; then

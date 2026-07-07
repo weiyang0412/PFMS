@@ -35,6 +35,8 @@ RUN mkdir -p /app/storage/framework/cache/data \
     /app/storage/logs \
     && chmod -R 775 /app/storage /app/bootstrap/cache
 
+RUN php artisan optimize:clear || true
+
 RUN composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 
 EXPOSE 8000
